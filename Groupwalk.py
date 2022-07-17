@@ -19,16 +19,16 @@ import logging
 #import re
 
 
-USAGE = """USAGE: Groupwalk.py <file1> <file2> <file3>
+USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
 
-  To create groups for the open-based group-walk algorithm, to provide
-  the filtering procedure that eliminates similar peptide matches per scan,
-  and to implement the group-walk algorithm itself. The first input file
-  is the narrow search file output, the second input file is the open search
-  file output, and the last input file contains the target-decoy peptide pairs. 
-  Output is a list of q-values, and their corresponding PSMs. Search files can
-  be either tab-delimited crux-search files or tab-delimited .tsv files from
-  MS-Fragger.
+  This program implements the group-walk algorithm, including the
+  creation of groups and the filtering procedure that eliminates
+  similar peptide matches per scan, The first input file is the narrow
+  search file output, the second input file is the open search file
+  output, and the last input file contains the target-decoy peptide
+  pairs. Output is a list of PSMs and their corresponding q-values.
+  The input search files can be either tab-delimited Crux search files
+  or tab-delimited .tsv files from MS-Fragger.
 
   Options:
       
@@ -55,7 +55,7 @@ USAGE = """USAGE: Groupwalk.py <file1> <file2> <file3>
     --score <string>      Either 'tailor' or 'xcorr' or 'hyper'. The score 
                           that will be used by group-walk. If either
                           'tailor' or 'xcorr' is used, it is assumed the
-                          search files are derived from crux-tide. If
+                          search files are derived from Tide. If
                           'hyper' it is assumed the search files are
                           derived from MS-Fragger.
                           Default = 'tailor'.
@@ -79,7 +79,7 @@ USAGE = """USAGE: Groupwalk.py <file1> <file2> <file3>
                                     Default = 1.0005079/4.
                                     
     --adaptive <T|F>      To determine whether groups should be chosen
-                          using the Kolmogoriv-Smirnov test or if a
+                          using the Kolmogorov-Smirnov test or if a
                           fixed procedure should be used.
                           Default = T.
                           
@@ -89,7 +89,7 @@ USAGE = """USAGE: Groupwalk.py <file1> <file2> <file3>
                                    Default = T.
             
     --group_thresh <value>         The p-value threshold used to determine
-                                   whethers group are merged or kept
+                                   whether groups are merged or kept
                                    separate.
                                    Default = 0.01.
                                    
@@ -122,7 +122,7 @@ USAGE = """USAGE: Groupwalk.py <file1> <file2> <file3>
                           should be from the target database. Groupwalk
                           will automatically search for the decoy database
                           search files in the same file path by replacing
-                          the text "target" for "decoy".
+                          the text "target" with "decoy".
                           Default = T.
                           
     --return_filt_search <T|F>  Whether or not to return filtered narrow
@@ -153,9 +153,9 @@ USAGE = """USAGE: Groupwalk.py <file1> <file2> <file3>
                                 included by default. Variable modifications
                                 do not need specification (they are accounted
                                 for via the search files). List mods in comma
-                                separated way e.g.
+                                separated format, e.g.
                                 nterm:10,cterm:-20,L:50.
-                                This option only required for crux-search.
+                                This option only required for Tide.
                                 Default = None.
             
 """
