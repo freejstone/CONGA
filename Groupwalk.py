@@ -83,7 +83,11 @@ USAGE = """USAGE: Groupwalk.py <file1> <file2> <file3>
                           fixed procedure should be used.
                           Default = T.
                           
-                          
+    --print_chimera <T|F>          To determine whether we print the number
+                                   of scans that have more than 1 peptide
+                                   discovered at the 1% FDR level.
+                                   Default = T.
+            
     --group_thresh <value>         The p-value threshold used to determine
                                    whethers group are merged or kept
                                    separate.
@@ -417,7 +421,7 @@ def group_walk(winning_scores, labels, all_group_ids, K = 40, return_frontier = 
         logging.error("winning_scores, labels, all_group_ids are not of the same length.")
         sys.exit("winning_scores, labels, all_group_ids are not of the same length.")
     
-    logging.error("Applying group walk.")
+    logging.info("Applying group walk.")
     sys.stderr.write("Applying group walk.\n")
         
     ordered_inds = sorted(range(len(winning_scores)), key=lambda k: winning_scores[k]) # record the indices in order of the scores from smallest to largest
@@ -543,7 +547,7 @@ def group_walk(winning_scores, labels, all_group_ids, K = 40, return_frontier = 
     else:
         results = [pd.Series(q_vals, name = 'q_vals')]
     
-    logging.error("Group walk complete.")
+    logging.info("Group walk complete.")
     sys.stderr.write("Group walk complete.\n")
     return(results)
 
@@ -735,26 +739,25 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
         decoys_open = target_decoys_open[( target_decoys_open['target_decoy'] == 'decoy' ) & ( target_decoys_open['xcorr_rank'].isin(range(1, tops + 1)) )]    
         
     else:
-        targets_narrow = target_decoys_narrow[target_decoys_narrow['sequence'].isin(peptide_list['target'])]
-        decoys_narrow = target_decoys_narrow[target_decoys_narrow['sequence'].isin(peptide_list['decoy'])]
+        targets_narrow = target_decoys_narrow[target_decoys_narrow['sequence'].isin(peptide_list['target'])].copy()
+        decoys_narrow = target_decoys_narrow[target_decoys_narrow['sequence'].isin(peptide_list['decoy'])].copy()
         #targets_narrow = target_decoys_narrow[( target_decoys_narrow['peptide'].isin(peptide_list['target'].str.replace("\\[|\\]|\\.|\d+", "")) )]
         #decoys_narrow = target_decoys_narrow[( target_decoys_narrow['peptide'].isin(peptide_list['decoy'].str.replace("\\[|\\]|\\.|\d+", "")) )]
-        targets_narrow['target_decoy'] = 'target'
-        decoys_narrow['target_decoy'] = 'decoy'
+        targets_narrow.loc[:, 'target_decoy'] = 'target'
+        decoys_narrow.loc[:, 'target_decoy'] = 'decoy'
         
-        targets_open = target_decoys_open[( target_decoys_open['sequence'].isin(peptide_list['target']) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )]
-        decoys_open = target_decoys_open[( target_decoys_open['sequence'].isin(peptide_list['decoy']) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )]    
+        targets_open = target_decoys_open[( target_decoys_open['sequence'].isin(peptide_list['target']) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )].copy()
+        decoys_open = target_decoys_open[( target_decoys_open['sequence'].isin(peptide_list['decoy']) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )].copy()  
         
         #targets_open = target_decoys_open[( target_decoys_open['peptide'].isin(peptide_list['target'].str.replace("\\[|\\]|\\.|\d+", "")) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )]
         #decoys_open = target_decoys_open[( target_decoys_open['peptide'].isin(peptide_list['decoy'].str.replace("\\[|\\]|\\.|\d+", "")) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )]    
-        targets_open['target_decoy'] = 'target'
-        decoys_open['target_decoy'] = 'decoy'
+        targets_open.loc[:, 'target_decoy'] = 'target'
+        decoys_open.loc[:, 'target_decoy'] = 'decoy'
         
         #decoys_open['sequence_plus_variable_mods'] = decoys_open['peptide'] + decoys_open['modification_info']
         #targets_open['sequence_plus_variable_mods'] = targets_open['peptide'] + targets_open['modification_info']
         #decoys_narrow['sequence_plus_variable_mods'] = decoys_narrow['peptide'] + decoys_narrow['modification_info']
         #targets_narrow['sequence_plus_variable_mods'] = targets_narrow['peptide'] + targets_narrow['modification_info']
-
         
     #sorting PSMs by their score and deleting duplicate PSMs that share the same sequence (up to variable modification if account_mods == True)
     if score == 'tailor':
@@ -772,7 +775,6 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
         targets_open = targets_open.sort_values(by=['hyperscore'], ascending=False)
         decoys_narrow = decoys_narrow.sort_values(by=['hyperscore'], ascending=False)
         targets_narrow = targets_narrow.sort_values( by=['hyperscore'], ascending=False)
-        #I AM UP TO HERE
     if account_mods:
         if crux_used:
             decoys_open = decoys_open.drop_duplicates(subset = ['original_target_sequence'])
@@ -997,17 +999,17 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     scan = pd.Series([0]*len(winning_scores))
     if crux_used:
         scan[Ws] = targets['scan'][Ws]
-        scan[Ds] = targets['scan'][Ds]
+        scan[Ds] = decoys['scan'][Ds]
     else:
         scan[Ws] = targets['scannum'][Ws]
-        scan[Ds] = targets['scannum'][Ds]
+        scan[Ds] = decoys['scannum'][Ds]
     
     #collect information regarding winning peptide
     df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan'])
     df = df.loc[random.sample(range(df.shape[0]), df.shape[0])]
     
     #creating bins for the mass differences
-    breaks_p = np.arange(0, 100 + precursor_bin_width, precursor_bin_width) - precursor_bin_width/2
+    breaks_p = np.arange(0, 100 + 2*precursor_bin_width, precursor_bin_width) - precursor_bin_width/2
     breaks_n = list(reversed(-breaks_p))
     breaks = pd.Series(breaks_n[0:(len(breaks_n) - 1)] + list(breaks_p), name = 'bins')
     digitized = np.digitize(df['delta_mass'], breaks)
@@ -1056,7 +1058,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
         
             if len(else_group) == 0: break
         
-            test_first = stats.ks_2samp(df['winning_scores'].loc[cand_group], df['winning_scores'].loc[else_group])
+            test_first = stats.ks_2samp(df['winning_scores'].loc[cand_group], df['winning_scores'].loc[else_group], mode = 'asymp')
         
             if test_first.pvalue <= group_thresh:
                 unique_gs = all_group_ids.unique()
@@ -1072,7 +1074,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
                     test_pvals = []
                     for g in unique_gs:
                         other_group_scores = df['winning_scores'][(all_group_ids == g)]
-                        test = stats.ks_2samp(df['winning_scores'].loc[cand_group], other_group_scores)
+                        test = stats.ks_2samp(df['winning_scores'].loc[cand_group], other_group_scores, mode = 'asymp')
                         test_pvals.append(test.pvalue)
                         if test.pvalue > group_thresh:
                             all_group_ids[cand_group] = g
@@ -1176,7 +1178,7 @@ def add_modification_to_amino_acid(df, static_mods):
             
             mass = mods[i + 1]
             if aa_list[site] in static_mods:
-                if static_mods[aa_list[site]] == mass:
+                if abs(static_mods[aa_list[site]] - float(mass)) <= 10**(-4):
                     continue
             aa_list[site] = aa_list[site] + '[' + mass + ']'
             
@@ -1221,6 +1223,7 @@ def main():
     #print_scan_mult = True
     precursor_bin_width = 1.0005079/4
     adaptive = True
+    print_chimera = True
     group_thresh = 0.01
     print_group_pi0 = True
     min_group_size = 2
@@ -1287,6 +1290,16 @@ def main():
             else:
                 sys.stderr.write("Invalid argument for --adaptive")
                 logging.info("Invalid argument for --adaptive")
+                sys.exit(1)
+            sys.argv = sys.argv[1:]
+        elif (next_arg == "--print_chimera"):
+            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
+                print_chimera = True
+            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
+                print_chimera = False
+            else:
+                sys.stderr.write("Invalid argument for --print_chimera")
+                logging.info("Invalid argument for --print_chimera")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--group_thresh"):
@@ -1494,6 +1507,27 @@ def main():
     results = group_walk(list(df['winning_scores']), list(df['labels']), list(df['all_group_ids']), K, return_frontier, correction)
     df['q_vals'] = results[0]
     
+    power_1 = sum( ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) )
+    power_5 = sum( ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) )
+    
+    logging.info(str(power_1) + " peptides discovered at the 1% FDR level.")
+    logging.info(str(power_5) + " peptides discovered at the 5% FDR level.")
+    sys.stderr.write(str(power_1) + " peptides discovered at the 1% FDR level. \n")
+    sys.stderr.write(str(power_5) + " peptides discovered at the 5% FDR level. \n")
+    
+    if print_chimera:
+        scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+        logging.info("Printing the scan multiplicity among the discovered peptides at 1% FDR level:")
+        logging.info(scan_mult1.to_string())
+        sys.stderr.write("Printing the scan multiplicity among the discovered peptides at 1% FDR level: \n")
+        sys.stderr.write(scan_mult1.to_string() + "\n")
+        
+        scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+        logging.info("Printing the scan multiplicity among the discovered peptides at 5% FDR level:")
+        logging.info(scan_mult5.to_string())
+        sys.stderr.write("Printing the scan multiplicity among the discovered peptides at 5% FDR level: \n")
+        sys.stderr.write(scan_mult5.to_string() + "\n")
+        
     if output_dir != './':
         if os.path.isdir(output_dir):
             df.to_csv(output_dir + "/" + file_name, header=True, index = False, sep = '\t')
