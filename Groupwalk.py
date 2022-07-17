@@ -13,7 +13,7 @@ import random
 import numpy as np
 from scipy import stats
 import peptides
-import threading
+import multiprocessing
 import os 
 import logging
 #import re
@@ -125,6 +125,10 @@ USAGE = """USAGE: Groupwalk.py <file1> <file2> <file3>
                           the text "target" for "decoy".
                           Default = T.
                           
+    --return_filt_search <T|F>  Whether or not to return filtered narrow
+                                and open search files.
+                                Default = F.
+                          
     --correction <integer>      The correction term used in estimating the
                                 FDR. +1 is used for FDR control.
                                 Default = 1.
@@ -136,7 +140,7 @@ USAGE = """USAGE: Groupwalk.py <file1> <file2> <file3>
     --frontier_name <string>    The file-name of the output frontier.
                                 Default = frontier_results.txt.
     
-    --n_threads <integer>       The number of threads, used in the filtering
+    --n_processes <integer>     The number of threads, used in the filtering
                                 process.
                                 Default = 1.
                                 
@@ -573,7 +577,7 @@ def filter_scan(search_df, thresh = 0.25, frag_bin_size = 0.05, static_mods = {'
     return drop_scan
 
 ###############################################################################
-def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, thresh = 0.25, n_threads = 1, neighbour_remove = True, crux_used = True, static_mods = {'C':57.02146}):
+def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, thresh = 0.25, n_processes = 1, neighbour_remove = True, crux_used = True, static_mods = {'C':57.02146}):
     '''
     Parameters
     ----------
@@ -587,8 +591,8 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     thresh : float
         The threshold used to determine neighbouring peptides.
         The default is 0.25.
-    n_threads : int
-        Number of threads to be used. The default is 1.
+    n_processes : int
+        Number of proccesses to be used. The default is 1.
     neighbour_remove : bool
         Whether we remove neighbours or not. The default is True.
     crux_used : bool
@@ -624,7 +628,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     logging.info("Filtering for neighbours.")
     sys.stderr.write("Filtering for neighbours.\n")
     
-    if n_threads == 1:
+    if n_processes == 1:
         if crux_used:
             results = target_decoys_all.groupby('scan').apply(filter_scan, thresh, 0.05, static_mods)
         else:
@@ -636,62 +640,49 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     else:
         #if more than 1 thread, we partition the dataframe
         if crux_used:
-            target_decoys_all['split_col'] = pd.cut(target_decoys_all['scan'], n_threads)
+            target_decoys_all['split_col'] = pd.cut(target_decoys_all['scan'], n_processes)
         else:
-            target_decoys_all['split_col'] = pd.cut(target_decoys_all['scannum'], n_threads)
+            target_decoys_all['split_col'] = pd.cut(target_decoys_all['scannum'], n_processes)
         target_decoys_grouped = target_decoys_all.groupby(target_decoys_all.split_col)
-        list_of_df = [0]*n_threads
+        list_of_df = [0]*n_processes
         for i in range(len(target_decoys_all['split_col'].unique())):
             list_of_df[i] = target_decoys_grouped.get_group(target_decoys_all['split_col'].unique()[i])
             list_of_df[i].reset_index(drop = True, inplace = True)
         
         if crux_used:
-            class myThread(threading.Thread):
-        
-                def __init__(self, threadID, name, df):
-                   threading.Thread.__init__(self)
-                   self.threadID = threadID
-                   self.name = name
-                   self.df = df
-                   self.drop_scan = 'need to run start() first.\n'
-                def run(self):
-                   sys.stderr.write("Starting " + self.name + "\n")
-                   self.drop_scan = self.df.groupby('scan').apply(filter_scan, thresh, 0.05, static_mods)
-                   sys.stderr.write("Exiting " + self.name + "\n")
+            def filter_scan_subset(df, task_number, return_dict):
+                sys.stderr.write("Starting Process " + str(task_number) + " \n")
+                logging.info("Starting Process " + str(task_number))
+                results = df.groupby('scan').apply(filter_scan, thresh, 0.05, static_mods)
+                results = results.sort_index(ascending = False)
+                results = results.apply(pd.Series).stack().reset_index()
+                return_dict[task_number] = results[0]
+                sys.stderr.write("Process " + str(task_number) + " finished \n")
+                logging.info("Starting Process " + str(task_number) + " finished")
         else:
-            class myThread(threading.Thread):
+            def filter_scan_subset(df, task_number, return_dict):
+                sys.stderr.write("Starting Process " + str(task_number) + " \n")
+                logging.info("Starting Process " + str(task_number))
+                results = df.groupby('scannum').apply(filter_scan, thresh, 0.05, static_mods)
+                results = results.sort_index(ascending = False)
+                results = results.apply(pd.Series).stack().reset_index()
+                return_dict[task_number] = results[0]
+                sys.stderr.write("Process " + str(task_number) + " finished \n")
+                logging.info("Starting Process " + str(task_number) + " finished")
         
-                def __init__(self, threadID, name, df):
-                   threading.Thread.__init__(self)
-                   self.threadID = threadID
-                   self.name = name
-                   self.df = df
-                   self.drop_scan = 'need to run start() first.\n'
-                def run(self):
-                   sys.stderr.write("Starting " + self.name + "\n")
-                   self.drop_scan = self.df.groupby('scannum').apply(filter_scan, thresh, 0.05, static_mods)
-                   sys.stderr.write("Exiting " + self.name + "\n")
-            
-         
-        threads = [0]*n_threads
+        processes = [0]*n_processes
+        manager = multiprocessing.Manager()
+        return_dict = manager.dict()
         for i in range(len(target_decoys_all['split_col'].unique())):
-            threads[i] = myThread(i, "Thread-" + str(i), list_of_df[i])
-            threads[i].start()
-            
-        for thread in threads:
-            thread.join()
+            processes[i] = multiprocessing.Process(target = filter_scan_subset, args = (list_of_df[i], i, return_dict))
+            processes[i].start()
         
-        if crux_used:
-            for i in range(len(target_decoys_all['split_col'].unique())):
-                results = threads[i].drop_scan.sort_index(ascending = False)
-                results = results.apply(pd.Series).stack().reset_index()
-                target_decoys_all.loc[target_decoys_all['split_col'] == target_decoys_all['split_col'].unique()[i], 'drop_scan'] = list(results[0])
-        else:
-            for i in range(len(target_decoys_all['split_col'].unique())):
-                results = threads[i].drop_scan.sort_index(ascending = False)
-                results = results.apply(pd.Series).stack().reset_index()
-                target_decoys_all.loc[target_decoys_all['split_col'] == target_decoys_all['split_col'].unique()[i], 'drop_scan'] = list(results[0])
-
+        for process in processes:
+            process.join()
+        
+        for i in range(len(target_decoys_all['split_col'].unique())):
+            target_decoys_all.loc[target_decoys_all['split_col'] == target_decoys_all['split_col'].unique()[i], 'drop_scan'] = list(return_dict[i])
+            
     target_decoys_all = target_decoys_all[target_decoys_all['drop_scan'] == False] 
     target_decoys_all.reset_index(drop = True, inplace = True)
     logging.info("Filtering for neighbours is complete.")
@@ -1231,8 +1222,9 @@ def main():
     neighbour_remove = True
     thresh = 0.25
     concat = True
+    return_filt_search = False
     correction = 1
-    n_threads = 1
+    n_processes = 1
     return_frontier = False
     output_dir = './'
     file_name = 'group_walk_results.txt'
@@ -1344,11 +1336,21 @@ def main():
                 logging.info("Invalid argument for --concat")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
+        elif (next_arg == "--return_filt_search"):
+            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
+                return_filt_search = True
+            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
+                return_filt_search = False
+            else:
+                sys.stderr.write("Invalid argument for --return_filt_search")
+                logging.info("Invalid argument for --return_filt_search")
+                sys.exit(1)
+            sys.argv = sys.argv[1:]
         elif (next_arg == "--correction"):
             correction = float(sys.argv[0])  
             sys.argv = sys.argv[1:]
-        elif (next_arg == "--n_threads"):
-            n_threads = int(sys.argv[0])  
+        elif (next_arg == "--n_processes"):
+            n_processes = int(sys.argv[0])  
             sys.argv = sys.argv[1:]
         elif (next_arg == "--return_frontier"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
@@ -1498,8 +1500,16 @@ def main():
         logging.info("Rewriting peptide sequence in crux-search format complete.")
         sys.stderr.write("Rewriting peptide sequence in crux-search format complete. \n")
         
-    target_decoys_all = filter_narrow_open(narrow_target_decoys, open_target_decoys, tops_open, thresh, n_threads, neighbour_remove, crux_used, static_mods)
+    target_decoys_all = filter_narrow_open(narrow_target_decoys, open_target_decoys, tops_open, thresh, n_processes, neighbour_remove, crux_used, static_mods)
     
+    if return_filt_search:
+        logging.info("Returning filtered search files in output directory.")
+        sys.stderr.write("Returning filtered search files in output directory. \n")
+        target_decoys_all_narrow = target_decoys_all[target_decoys_all['database'] == "narrow"]
+        target_decoys_all_open = target_decoys_all[target_decoys_all['database'] == "open"]
+        target_decoys_all_narrow.to_csv(output_dir + "/" + "filtered_" + search_file_narrow, header=True, index = False, sep = '\t')
+        target_decoys_all_open.to_csv(output_dir + "/" + "filtered_" + search_file_open, header=True, index = False, sep = '\t')
+        
     logging.info("Reading peptide list.")
     sys.stderr.write("Reading peptide list. \n")
     peptide_list = pd.read_table(td_list)
