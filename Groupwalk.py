@@ -27,7 +27,7 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
   search file output, the second input file is the open search file
   output, and the last input file contains the target-decoy peptide
   pairs. Output is a list of PSMs and their corresponding q-values.
-  The input search files can be either tab-delimited Crux search files
+  The input search files can be either tab-delimited Tide search files
   or tab-delimited .tsv files from MS-Fragger. The output file is a
   tab-delimited .txt file containing the following information of the PSMs
   used by groupwalk: the peptide sequence, the scan number, the 
@@ -167,7 +167,6 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
                                 for via the search files). List mods in comma
                                 separated format, e.g.
                                 nterm:10,cterm:-20,L:50.
-                                This option only required for Tide.
                                 Default = None.
             
 """
@@ -589,7 +588,7 @@ def filter_scan(search_df, thresh = 0.25, frag_bin_size = 0.05, static_mods = {'
     return drop_scan
 
 ###############################################################################
-def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, thresh = 0.25, n_processes = 1, neighbour_remove = True, crux_used = True, static_mods = {'C':57.02146}):
+def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, thresh = 0.25, n_processes = 1, neighbour_remove = True, tide_used = True, static_mods = {'C':57.02146}):
     '''
     Parameters
     ----------
@@ -607,8 +606,8 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
         Number of proccesses to be used. The default is 1.
     neighbour_remove : bool
         Whether we remove neighbours or not. The default is True.
-    crux_used : bool
-        Whether the input dataframes come from crux or not.
+    tide_used : bool
+        Whether the input dataframes come from tide or not.
         The default is True.
     static_mods : dict
         Static modifications. The default is {'C':57.02146}.
@@ -626,7 +625,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     #makes sure the PSMs from the narrow and open search are ordered by scan first, then by their xcorr_score
     #indeed it makes sense to use xcorr_score over tailor score, as tailor_score uses candidate PSMs to 
     #normalise the xcorr_score - this differs from narrow to open. 
-    if crux_used:
+    if tide_used:
         target_decoys_all = target_decoys_all.sort_values(by=['scan', 'xcorr_score'], ascending = False)
     else:
         target_decoys_all = target_decoys_all.sort_values(by=['scannum', 'hyperscore'], ascending = False)
@@ -641,7 +640,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     sys.stderr.write("Filtering for neighbours.\n")
     
     if n_processes == 1:
-        if crux_used:
+        if tide_used:
             results = target_decoys_all.groupby('scan').apply(filter_scan, thresh, 0.05, static_mods)
         else:
             results = target_decoys_all.groupby('scannum').apply(filter_scan, thresh, 0.05, static_mods)
@@ -651,7 +650,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
         target_decoys_all['drop_scan'] = results[0]
     else:
         #if more than 1 thread, we partition the dataframe
-        if crux_used:
+        if tide_used:
             target_decoys_all['split_col'] = pd.cut(target_decoys_all['scan'], n_processes)
         else:
             target_decoys_all['split_col'] = pd.cut(target_decoys_all['scannum'], n_processes)
@@ -661,7 +660,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
             list_of_df[i] = target_decoys_grouped.get_group(target_decoys_all['split_col'].unique()[i])
             list_of_df[i].reset_index(drop = True, inplace = True)
         
-        if crux_used:
+        if tide_used:
             def filter_scan_subset(df, task_number, return_dict):
                 sys.stderr.write("Starting Process " + str(task_number) + " \n")
                 logging.info("Starting Process " + str(task_number))
@@ -703,14 +702,14 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     return target_decoys_all
 ###############################################################################
 
-def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40, tops = 2, score = 'tailor', random_h2h = True, account_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, crux_used = True, print_group_pi0 = True):
+def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40, tops = 2, score = 'tailor', random_h2h = True, account_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = True, print_group_pi0 = True):
     
     #standardize column names
     target_decoys.columns = target_decoys.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
     target_decoys_narrow_TDC.columns = target_decoys_narrow_TDC.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
     
     #take only the top 1 from the narrow search
-    if crux_used:
+    if tide_used:
         target_decoys_narrow_TDC = target_decoys_narrow_TDC[target_decoys_narrow_TDC['xcorr_rank'] == 1]
     else:
         target_decoys_narrow_TDC = target_decoys_narrow_TDC[target_decoys_narrow_TDC['hit_rank'] == 1]
@@ -734,7 +733,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     target_decoys_narrow = target_decoys[target_decoys['database'] == "narrow"]
 
 
-    if crux_used:
+    if tide_used:
         targets_narrow = target_decoys_narrow[( target_decoys_narrow['target_decoy'] == 'target' )]
         decoys_narrow = target_decoys_narrow[( target_decoys_narrow['target_decoy'] == 'decoy' )]
          #taking the top "tops" PSMs from the open search
@@ -779,7 +778,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
         decoys_narrow = decoys_narrow.sort_values(by=['hyperscore'], ascending=False)
         targets_narrow = targets_narrow.sort_values( by=['hyperscore'], ascending=False)
     if account_mods:
-        if crux_used:
+        if tide_used:
             decoys_open = decoys_open.drop_duplicates(subset = ['original_target_sequence'])
             targets_open = targets_open.drop_duplicates(subset = ['original_target_sequence'])
             decoys_narrow = decoys_narrow.drop_duplicates(subset = ['original_target_sequence'])
@@ -791,7 +790,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
             decoys_narrow = decoys_narrow.drop_duplicates(subset = ['peptide'])
             targets_narrow = targets_narrow.drop_duplicates(subset = ['peptide'])
     else:
-        #sequence is both unique for MS_fragger and crux-search results
+        #sequence is both unique for MS_fragger and tide-search results
         decoys_open = decoys_open.drop_duplicates(subset = ['sequence'])
         targets_open = targets_open.drop_duplicates(subset = ['sequence'])
         decoys_narrow = decoys_narrow.drop_duplicates(subset = ['sequence'])
@@ -804,7 +803,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     targets_narrow.reset_index(drop = True, inplace = True)
     
     #creating PSM column to uniquely identify the PSMs
-    if crux_used:
+    if tide_used:
         decoys_open.loc[:, 'scan_plus_seq'] = decoys_open['scan'].astype(str) + ' ' + decoys_open['sequence']
         targets_open.loc[:, 'scan_plus_seq'] = targets_open['scan'].astype(str) + ' ' + targets_open['sequence']
     else:
@@ -813,7 +812,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
 
     #creating PSM column to uniquely identify the PSMs
     target_decoys_narrow_TDC.reset_index(drop = True, inplace = True)
-    if crux_used:
+    if tide_used:
         target_decoys_narrow_TDC.loc[:,'scan_plus_seq'] = target_decoys_narrow_TDC['scan'].astype(str) + ' ' + target_decoys_narrow_TDC['sequence']
     else:
         target_decoys_narrow_TDC.loc[:,'scan_plus_seq'] = target_decoys_narrow_TDC['scannum'].astype(str) + ' ' + target_decoys_narrow_TDC['sequence']
@@ -875,7 +874,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     targets = targets.sort_values(by=['database'])
     
     if account_mods:
-        if crux_used:            
+        if tide_used:            
             decoys = decoys.drop_duplicates(subset = ['original_target_sequence'])
             targets = targets.drop_duplicates(subset = ['original_target_sequence'])
         else:
@@ -980,7 +979,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     winning_peptides[Ds] = decoys['sequence'][Ds]
     
     rank = pd.Series([0]*len(winning_scores))
-    if crux_used:
+    if tide_used:
         rank[Ws] = targets['xcorr_rank'][Ws]
         rank[Ds] = decoys['xcorr_rank'][Ds]
     else:
@@ -988,7 +987,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
         rank[Ds] = decoys['hit_rank'][Ds]
     
     delta_mass = pd.Series([0]*len(winning_scores))
-    if crux_used:
+    if tide_used:
         delta_mass[Ws] = targets['spectrum_neutral_mass'][Ws] - targets['peptide_mass'][Ws]
         delta_mass[Ds] = decoys['spectrum_neutral_mass'][Ds] - decoys['peptide_mass'][Ds]
     else:
@@ -1000,7 +999,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     database[Ds] = decoys['database'][Ds]
     
     scan = pd.Series([0]*len(winning_scores))
-    if crux_used:
+    if tide_used:
         scan[Ws] = targets['scan'][Ws]
         scan[Ds] = decoys['scan'][Ds]
     else:
@@ -1199,7 +1198,7 @@ def create_peptides_with_mod(unmodified_peptides, modification_info, static_mods
 
     Returns
     -------
-    Modified peptides in the format of crux-search.
+    Modified peptides in the format of tide-search.
 
     '''
     modification_info = modification_info.str.findall('-?\d+\.\d+|-?\d+|N\\-term|C\\-term')
@@ -1244,7 +1243,7 @@ def main():
     static_mods = {'C':57.02146}
     
     
-    logging.basicConfig(filename="log.txt", level=logging.DEBUG)
+    
     
     # Parse the command line.
     sys.argv = sys.argv[1:]
@@ -1270,7 +1269,6 @@ def main():
                 random_h2h = False
             else:
                 sys.stderr.write("Invalid argument for --random_h2h")
-                logging.info("Invalid argument for --random_h2h")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--account_mods"):
@@ -1280,7 +1278,6 @@ def main():
                 account_mods = False
             else:
                 sys.stderr.write("Invalid argument for --account_mods")
-                logging.info("Invalid argument for --account_mods")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--precursor_bin_width"):
@@ -1293,7 +1290,6 @@ def main():
                 adaptive = False
             else:
                 sys.stderr.write("Invalid argument for --adaptive")
-                logging.info("Invalid argument for --adaptive")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--print_chimera"):
@@ -1303,7 +1299,6 @@ def main():
                 print_chimera = False
             else:
                 sys.stderr.write("Invalid argument for --print_chimera")
-                logging.info("Invalid argument for --print_chimera")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--group_thresh"):
@@ -1316,7 +1311,6 @@ def main():
                 print_group_pi0 = False
             else:
                 sys.stderr.write("Invalid argument for --print_group_pi0")
-                logging.info("Invalid argument for --print_group_pi0")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--min_group_size"):
@@ -1332,7 +1326,6 @@ def main():
                 neighbour_remove = False
             else:
                 sys.stderr.write("Invalid argument for --neighbour_remove")
-                logging.info("Invalid argument for --neighbour_remove")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--thresh"):
@@ -1345,7 +1338,6 @@ def main():
                 concat = False
             else:
                 sys.stderr.write("Invalid argument for --concat")
-                logging.info("Invalid argument for --concat")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--return_filt_search"):
@@ -1355,7 +1347,6 @@ def main():
                 return_filt_search = False
             else:
                 sys.stderr.write("Invalid argument for --return_filt_search")
-                logging.info("Invalid argument for --return_filt_search")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--n_processes"):
@@ -1368,7 +1359,6 @@ def main():
                 return_frontier = False
             else:
                 sys.stderr.write("Invalid argument for --return_frontier")
-                logging.info("Invalid argument for --return_frontier")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--output_dir"):
@@ -1385,7 +1375,6 @@ def main():
             sys.argv = sys.argv[1:]
         else:
             sys.stderr.write("Invalid option (%s).c" % next_arg)
-            logging.info("Invalid option (%s).c" % next_arg)
             sys.exit(1)
     if (len(sys.argv) != 3):
         sys.stderr.write(USAGE)
@@ -1394,13 +1383,15 @@ def main():
     search_file_open = sys.argv[1]
     td_list = sys.argv[2]
     
+    logging.basicConfig(filename=output_dir + "/" + file_name.replace('.txt', '.log'), level=logging.DEBUG)
+    
     sys.stderr.write("Successfully read in arguments. \n")
     logging.info("Successfully read in arguments")
     
     if score == 'tailor' or score == 'xcorr':
-        crux_used = True
+        tide_used = True
     else:
-        crux_used = False
+        tide_used = False
         sys.stderr.write("MS-Fragger output files detected. \n")
         logging.info("MS-Fragger output files detected.")
 
@@ -1412,7 +1403,7 @@ def main():
         narrow_target_decoys.columns = narrow_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
         open_target_decoys.columns = open_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
 
-        if crux_used:
+        if tide_used:
             if 'hyperscore' in narrow_target_decoys.columns:
                 logging.error("Please set --score hyper")
                 sys.exit("Please set --score hyper.\n")
@@ -1439,7 +1430,7 @@ def main():
         
         
         #No need for MS-Fragger output as peptide sequence is given without modification
-        if crux_used:
+        if tide_used:
             if 'hyperscore' in narrow_target_decoys.columns:
                 logging.error("Please set --score hyper")
                 sys.exit("Please set --score hyper.\n")
@@ -1467,7 +1458,7 @@ def main():
         narrow_target_decoys = pd.concat([narrow_1, narrow_2])
         open_target_decoys = pd.concat([open_1, open_2])
         
-        if crux_used:
+        if tide_used:
             narrow_target_decoys = narrow_target_decoys.sort_values(by=['scan', 'xcorr_score'], ascending=False)
             open_target_decoys = open_target_decoys.sort_values(by=['scan', 'xcorr_score'], ascending=False)
         else:
@@ -1477,7 +1468,7 @@ def main():
         narrow_target_decoys = narrow_target_decoys.reset_index(drop = True)
         open_target_decoys = open_target_decoys.reset_index(drop = True)
         
-        if crux_used:
+        if tide_used:
             narrow_target_decoys = narrow_target_decoys.assign(xcorr_rank = narrow_target_decoys.groupby('scan').scan.transform(lambda x: range(1, len(x) + 1)))
             open_target_decoys = open_target_decoys.assign(xcorr_rank = open_target_decoys.groupby('scan').scan.transform(lambda x: range(1, len(x) + 1)))
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
@@ -1501,15 +1492,15 @@ def main():
         logging.error("search files do not share the same column names.")
         sys.exit("search files do not share the same column names.\n")
     
-    if not crux_used:
-        sys.stderr.write("Rewriting peptide sequence in crux-search format. \n")
-        logging.info("Rewriting peptide sequence in crux-search format.")
+    if not tide_used:
+        sys.stderr.write("Rewriting peptide sequence in tide-search format. \n")
+        logging.info("Rewriting peptide sequence in tide-search format.")
         narrow_target_decoys['sequence'] = create_peptides_with_mod(narrow_target_decoys['peptide'], narrow_target_decoys['modification_info'], static_mods)
         open_target_decoys['sequence'] = create_peptides_with_mod(open_target_decoys['peptide'], open_target_decoys['modification_info'], static_mods)
-        logging.info("Rewriting peptide sequence in crux-search format complete.")
-        sys.stderr.write("Rewriting peptide sequence in crux-search format complete. \n")
+        logging.info("Rewriting peptide sequence in tide-search format complete.")
+        sys.stderr.write("Rewriting peptide sequence in tide-search format complete. \n")
         
-    target_decoys_all = filter_narrow_open(narrow_target_decoys, open_target_decoys, tops_open, thresh, n_processes, neighbour_remove, crux_used, static_mods)
+    target_decoys_all = filter_narrow_open(narrow_target_decoys, open_target_decoys, tops_open, thresh, n_processes, neighbour_remove, tide_used, static_mods)
     
     if return_filt_search:
         logging.info("Returning filtered search files in output directory.")
@@ -1522,7 +1513,7 @@ def main():
     logging.info("Reading peptide list.")
     sys.stderr.write("Reading peptide list. \n")
     peptide_list = pd.read_table(td_list)
-    df = create_groups(target_decoys_all, narrow_target_decoys, peptide_list, K, tops_gw, score, random_h2h, account_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, crux_used, print_group_pi0)
+    df = create_groups(target_decoys_all, narrow_target_decoys, peptide_list, K, tops_gw, score, random_h2h, account_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
     results = group_walk(list(df['winning_scores']), list(df['labels']), list(df['all_group_ids']), K, return_frontier, correction)
     df['q_vals'] = results[0]
     
