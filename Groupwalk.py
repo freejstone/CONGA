@@ -29,7 +29,7 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
   pairs. Output is a list of PSMs and their corresponding q-values.
   The input search files can be either tab-delimited Tide search files
   or tab-delimited .tsv files from MS-Fragger. The output file is a
-  tab-delimited .txt file containing the following information of the PSMs
+  tab-delimited .txt file containing the following information about the PSMs
   used by groupwalk: the peptide sequence, the scan number, the 
   score, the target-decoy label, whether the PSM came from the narrow
   or open search file, and a q-value.
@@ -114,14 +114,14 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
                                    Default = 4.
     
     --neighbour_remove <T|F>       If true, for each scan, we successively
-                                   move down the list of PSMs associated to
+                                   move down the list of PSMs associated with
                                    each scan, ordered in terms of the score
-                                   from highest to lowest and compute
+                                   from highest to lowest, and compute
                                    a similarity score between the current
                                    peptide and the previous peptide(s).
                                    If one of the similarity score(s) exceeds
                                    a certain threshold, the PSM associated 
-                                   to the current peptide is thrown out,
+                                   with the current peptide is thrown out,
                                    and we proceed to the next.
                                    Default = T.
     
@@ -145,7 +145,7 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
                                 
     --return_frontier <T|F>     The sequence of indices describing the
                                 positions of the frontier used by Groupwalk
-                                is retuned as a .txt file to the output
+                                is returned as a .txt file to the output
                                 directory.
                                 Default = F.
                                     
