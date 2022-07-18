@@ -21,14 +21,18 @@ import logging
 
 USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
 
-  This program implements the group-walk algorithm, including the
+  This program implements the Group-walk algorithm, including the
   creation of groups and the filtering procedure that eliminates
   similar peptide matches per scan, The first input file is the narrow
   search file output, the second input file is the open search file
   output, and the last input file contains the target-decoy peptide
   pairs. Output is a list of PSMs and their corresponding q-values.
   The input search files can be either tab-delimited Crux search files
-  or tab-delimited .tsv files from MS-Fragger.
+  or tab-delimited .tsv files from MS-Fragger. The output file is a
+  tab-delimited .txt file containing the following information of the PSMs
+  used by groupwalk: the peptide sequence, the scan number, the 
+  score, the target-decoy label, whether the PSM came from the narrow
+  or open search file, and a q-value.
 
   Options:
       
@@ -85,7 +89,8 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
                           
     --print_chimera <T|F>          To determine whether we print the number
                                    of scans that have more than 1 peptide
-                                   discovered at the 1% FDR level.
+                                   discovered at the 1% and 5% FDR level
+                                   to the log file.
                                    Default = T.
             
     --group_thresh <value>         The p-value threshold used to determine
@@ -94,12 +99,13 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
                                    Default = 0.01.
                                    
     --print_group_pi0 <T|F>        To determine whether the group-level
-                                   proportion of pi_0 is returned.
+                                   proportion of pi_0 is printed to the 
+                                   log file.
                                    Default = T.
     
     --min_group_size <integer>     The number of multiples of K that the
                                    used to determine the minimum size of
-                                   each group.
+                                   each group. See option --K.
                                    Default = 2.
                                    
     --n_top_groups <integer>       The number of top mass differences used
@@ -107,12 +113,20 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
                                    only if adaptive = False.
                                    Default = 4.
     
-    --neighbour_remove <T|F>       To determine if we are to remove the
-                                   peptide neighours within a scan or not.
+    --neighbour_remove <T|F>       If true, for each scan, we successively
+                                   move down the list of PSMs associated to
+                                   each scan, ordered in terms of the score
+                                   from highest to lowest and compute
+                                   a similarity score between the current
+                                   peptide and the previous peptide(s).
+                                   If one of the similarity score(s) exceeds
+                                   a certain threshold, the PSM associated 
+                                   to the current peptide is thrown out,
+                                   and we proceed to the next.
                                    Default = T.
     
     --thresh <value>      The similarity score used as a threshold to filter
-                          out neighbour peptides.
+                          out neighbouring peptides.
                           Default = 0.25.
     
     --concat <T|F>        To determine whether the input search files
@@ -128,13 +142,11 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
     --return_filt_search <T|F>  Whether or not to return filtered narrow
                                 and open search files.
                                 Default = F.
-                          
-    --correction <integer>      The correction term used in estimating the
-                                FDR. +1 is used for FDR control.
-                                Default = 1.
                                 
-    --return_frontier <T|F>     The correction term used in estimating the
-                                FDR. +1 is used for FDR control.
+    --return_frontier <T|F>     The sequence of indices describing the
+                                positions of the frontier used by Groupwalk
+                                is retuned as a .txt file to the output
+                                directory.
                                 Default = F.
                                     
     --frontier_name <string>    The file-name of the output frontier.
@@ -1345,9 +1357,6 @@ def main():
                 sys.stderr.write("Invalid argument for --return_filt_search")
                 logging.info("Invalid argument for --return_filt_search")
                 sys.exit(1)
-            sys.argv = sys.argv[1:]
-        elif (next_arg == "--correction"):
-            correction = float(sys.argv[0])  
             sys.argv = sys.argv[1:]
         elif (next_arg == "--n_processes"):
             n_processes = int(sys.argv[0])  
