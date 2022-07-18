@@ -16,6 +16,7 @@ import peptides
 import multiprocessing
 import os 
 import logging
+import time
 #import re
 
 
@@ -39,7 +40,7 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
     --output_dir <string> The file-path of the output
                           Default = './'.
                           
-    --file_name <string>  The file-name of the output
+    --file_root <string>  The file name of the output
                           Default = group_walk_results.txt.
 
     --K <integer>         The number of recently observed peptides used
@@ -1213,7 +1214,7 @@ def create_peptides_with_mod(unmodified_peptides, modification_info, static_mods
 def main():
     global USAGE
     
-    
+    start_time = time.time()
     
     # Set default values for parameters.
     K = 40
@@ -1238,11 +1239,11 @@ def main():
     n_processes = 1
     return_frontier = False
     output_dir = './'
-    file_name = 'group_walk_results.txt'
+    file_root = 'group_walk_results.txt'
     frontier_name = 'frontier_results.txt'
     static_mods = {'C':57.02146}
     
-    
+    command_line = ' '.join(sys.argv)
     
     
     # Parse the command line.
@@ -1364,8 +1365,8 @@ def main():
         elif (next_arg == "--output_dir"):
             output_dir = str(sys.argv[0])  
             sys.argv = sys.argv[1:]
-        elif (next_arg == "--file_name"):
-            file_name = str(sys.argv[0])  
+        elif (next_arg == "--file_root"):
+            file_root = str(sys.argv[0])  
             sys.argv = sys.argv[1:]
         elif (next_arg == "--frontier_name"):
             frontier_name = str(sys.argv[0])  
@@ -1383,7 +1384,10 @@ def main():
     search_file_open = sys.argv[1]
     td_list = sys.argv[2]
     
-    logging.basicConfig(filename=output_dir + "/" + file_name.replace('.txt', '.log'), level=logging.DEBUG)
+    logging.basicConfig(filename=output_dir + "/" + file_root.replace('.txt', '.log.txt'), level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+    
+    logging.info('Command used: ' + command_line)
+    sys.stderr.write('Command used: ' + command_line + "\n")
     
     sys.stderr.write("Successfully read in arguments. \n")
     logging.info("Successfully read in arguments")
@@ -1540,13 +1544,18 @@ def main():
         
     if output_dir != './':
         if os.path.isdir(output_dir):
-            df.to_csv(output_dir + "/" + file_name, header=True, index = False, sep = '\t')
+            df.to_csv(output_dir + "/" + file_root, header=True, index = False, sep = '\t')
         else:
             os.mkdir(output_dir)
-            df.to_csv(output_dir + "/" + file_name, header=True, index = False, sep = '\t')
+            df.to_csv(output_dir + "/" + file_root, header=True, index = False, sep = '\t')
     if return_frontier:
         results[1].to_csv(output_dir + "/" + frontier_name, header=True, index = False, sep = '\t')
-
+    
+    end_time = time.time()
+    
+    logging.info("Elapsed time: " + str(end_time - start_time) + " s")
+    sys.stderr.write("Elapsed time: " + str(end_time - start_time) + " s \n")
+    
 if __name__ == "__main__":
     main()    
     
