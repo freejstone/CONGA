@@ -17,6 +17,7 @@ import multiprocessing
 import os 
 import logging
 import time
+from tqdm import tqdm
 #import re
 
 
@@ -129,16 +130,6 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
     --thresh <value>      The similarity score used as a threshold to filter
                           out neighbouring peptides.
                           Default = 0.25.
-    
-    --concat <T|F>        To determine whether the input search files
-                          were searched against the concatenated target
-                          decoy database, or against the databases
-                          separately. If separate the two input search files
-                          should be from the target database. Groupwalk
-                          will automatically search for the decoy database
-                          search files in the same file path by replacing
-                          the text "target" with "decoy".
-                          Default = T.
                           
     --return_filt_search <T|F>  Whether or not to return filtered narrow
                                 and open search files.
@@ -169,6 +160,9 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
                                 separated format, e.g.
                                 nterm:10,cterm:-20,L:50.
                                 Default = None.
+                                
+    --dcy_prefix <string>       The prefix used for the decoy proteins.
+                                Default = 'decoy_'
             
 """
 
@@ -635,16 +629,18 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     if not neighbour_remove:
         logging.info("Not removing neighbours.")
         sys.stderr.write("Not removing neighbours.\n")
-        return target_decoys_all
+        return(target_decoys_all)
     
     logging.info("Filtering for neighbours.")
     sys.stderr.write("Filtering for neighbours.\n")
     
+    #filter_scan, thresh, 0.05, static_mods
     if n_processes == 1:
+        tqdm.pandas()
         if tide_used:
-            results = target_decoys_all.groupby('scan').apply(filter_scan, thresh, 0.05, static_mods)
+            results = target_decoys_all.groupby('scan').progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods))
         else:
-            results = target_decoys_all.groupby('scannum').apply(filter_scan, thresh, 0.05, static_mods)
+            results = target_decoys_all.groupby('scannum').progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods))
         results = results.sort_index(ascending = False)
         results = results.apply(pd.Series).stack().reset_index()
         
@@ -661,36 +657,54 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
             list_of_df[i] = target_decoys_grouped.get_group(target_decoys_all['split_col'].unique()[i])
             list_of_df[i].reset_index(drop = True, inplace = True)
         
+        def wrapper(df, q, thresh, frag_bin_size, static_mods):
+            result = filter_scan(df, thresh, frag_bin_size, static_mods)
+            q.put(1)
+            return(result)
+        
         if tide_used:
-            def filter_scan_subset(df, task_number, return_dict):
+            def filter_scan_subset(df, q, task_number, return_dict):
                 sys.stderr.write("Starting Process " + str(task_number) + " \n")
                 logging.info("Starting Process " + str(task_number))
-                results = df.groupby('scan').apply(filter_scan, thresh, 0.05, static_mods)
+                results = df.groupby('scan').apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
                 results = results.sort_index(ascending = False)
                 results = results.apply(pd.Series).stack().reset_index()
                 return_dict[task_number] = results[0]
                 sys.stderr.write("Process " + str(task_number) + " finished \n")
                 logging.info("Starting Process " + str(task_number) + " finished")
+                
+            def listener(q):
+                pbar = tqdm(total = sum([len(j.groupby('scan')) for j in list_of_df]))
+                for item in iter(q.get, None):
+                    pbar.update(item)
         else:
-            def filter_scan_subset(df, task_number, return_dict):
+            def filter_scan_subset(df, q, task_number, return_dict):
                 sys.stderr.write("Starting Process " + str(task_number) + " \n")
                 logging.info("Starting Process " + str(task_number))
-                results = df.groupby('scannum').apply(filter_scan, thresh, 0.05, static_mods)
+                results = df.groupby('scannum').apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
                 results = results.sort_index(ascending = False)
                 results = results.apply(pd.Series).stack().reset_index()
                 return_dict[task_number] = results[0]
                 sys.stderr.write("Process " + str(task_number) + " finished \n")
                 logging.info("Starting Process " + str(task_number) + " finished")
         
-        processes = [0]*n_processes
+            def listener(q):
+                pbar = tqdm(total = sum([len(j.groupby('scannum')) for j in list_of_df]))
+                for item in iter(q.get, None):
+                    pbar.update(item)
+            
         manager = multiprocessing.Manager()
+        q = manager.Queue()
         return_dict = manager.dict()
-        for i in range(len(target_decoys_all['split_col'].unique())):
-            processes[i] = multiprocessing.Process(target = filter_scan_subset, args = (list_of_df[i], i, return_dict))
-            processes[i].start()
-        
-        for process in processes:
-            process.join()
+        proc = multiprocessing.Process(target=listener, args=(q,))
+        proc.start()
+        workers = [multiprocessing.Process(target = filter_scan_subset, args=(list_of_df[i], q, i, return_dict)) for i in range(n_processes)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+        q.put(None)
+        proc.join()
         
         for i in range(len(target_decoys_all['split_col'].unique())):
             target_decoys_all.loc[target_decoys_all['split_col'] == target_decoys_all['split_col'].unique()[i], 'drop_scan'] = list(return_dict[i])
@@ -704,10 +718,6 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
 ###############################################################################
 
 def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40, tops = 2, score = 'tailor', random_h2h = True, account_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = True, print_group_pi0 = True):
-    
-    #standardize column names
-    target_decoys.columns = target_decoys.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
-    target_decoys_narrow_TDC.columns = target_decoys_narrow_TDC.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
     
     #take only the top 1 from the narrow search
     if tide_used:
@@ -1041,7 +1051,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
         #PSMs with xcorr_rank of 2 or more get "bundled together"
         rank = 1
         rank_val = [1]
-        rank_lab = '1 rank'
+        rank_lab = 'top PSMs'
         i = 0
         #create a candidate group based off the most frequent bins
         #make sure it's at least 2K in size by joining subsequent bins
@@ -1069,7 +1079,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
                 unique_gs = [unique_g for unique_g in unique_gs if rank_lab in unique_g]
                 unique_gs = random.sample(unique_gs, len(unique_gs))
                 if len(unique_gs) == 0:
-                    all_group_ids[cand_group] = rank_lab + ' ' + str(i)
+                    all_group_ids[cand_group] = rank_lab + ' & top ('  + str(largest_bin_considered) + ', ' + str(i) + '] mass bins'
                     largest_bin_considered = i
                     i += 1
                     continue
@@ -1083,21 +1093,21 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
                             all_group_ids[cand_group] = g
                             break
                     if all([test_pval <= group_thresh for test_pval in test_pvals]):
-                        all_group_ids[cand_group] = rank_lab + ' ' + str(i)
+                        all_group_ids[cand_group] = rank_lab + ' & top ('  + str(largest_bin_considered) + ', ' + str(i) + '] mass bins'
                         largest_bin_considered = i
                     i += 1
             else:
                 break
             
-        all_group_ids[(all_group_ids == 0) & (df['rank'] == 1)] = "1 rank left over"
+        all_group_ids[(all_group_ids == 0) & (df['rank'] == 1)] = "left over group"
         #For PSMs of rank 2 or higher, we use the bins considered determined by rank 1 PSMs and bundle them together in one group
         #If they are not sufficiently many of them, we throw them into the "1 rank left over" group
         if (tops > 1) and (largest_bin_considered > 0):
             inds_higher_rank = ( df['bins'].isin(bin_freq['bin'].loc[0:largest_bin_considered]) ) &  ( df['rank'].isin(range(2, tops + 1)) ) & (df['database'] == "open")
             if sum(inds_higher_rank) <= min_group_size*K:
-                all_group_ids[inds_higher_rank] = "1 rank left over"
+                all_group_ids[inds_higher_rank] = "left over group"
             else:
-                all_group_ids[inds_higher_rank] = "top for rank 2 or more"
+                all_group_ids[inds_higher_rank] = "top 2 or more PSMs"
             
         
         df['all_group_ids'] = all_group_ids            
@@ -1115,17 +1125,17 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
                 break
             if rank == 1:
                 rank_val = [1]
-                rank_lab = '1 rank'
+                rank_lab = 'top PSMs'
             if rank == 2:
                 rank_val = range(2, tops + 1)
-                rank_lab = '2 rank'
+                rank_lab = 'top 2 or more PSMs'
                     
             for i in range(1, min(n_top_groups, bin_freq.shape[0])):
-                all_group_ids[(df['bins'] == bin_freq['bin'].loc[i]) & df['rank'].isin(rank_val) & (df['database'] == "open")] = rank_lab + ' ' + str(i)
+                all_group_ids[(df['bins'] == bin_freq['bin'].loc[i]) & df['rank'].isin(rank_val) & (df['database'] == "open")] = rank_lab + ' & top '  + str(i) + ' mass bin'
         
-        all_group_ids[(all_group_ids == 0) & df['rank'].isin([1]) & (df['database'] == "open")] = "1 rank left over"
+        all_group_ids[(all_group_ids == 0) & df['rank'].isin([1]) & (df['database'] == "open")] = "top PSMs left over group"
         if tops > 1:
-            all_group_ids[(all_group_ids == 0) & df['rank'].isin(range(2, tops + 1)) & (df['database'] == "open")] = "2 rank left over"
+            all_group_ids[(all_group_ids == 0) & df['rank'].isin(range(2, tops + 1)) & (df['database'] == "open")] = "top 2 or more PSMs left over group"
         
         df['all_group_ids'] = all_group_ids
     
@@ -1134,7 +1144,8 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     if print_group_pi0:
         label_all_groups = df.groupby(['labels', 'all_group_ids']).size().reset_index(name = "val")
         label_all_groups = label_all_groups.set_index(['all_group_ids', 'labels']).unstack()
-        label_all_groups = label_all_groups.iloc[:,0].div(label_all_groups.iloc[:, 1])
+        label_all_groups.columns = ['decoys', 'targets']
+        label_all_groups['ratio'] = label_all_groups.iloc[:,0].div(label_all_groups.iloc[:, 1])
         sys.stderr.write(label_all_groups.to_string() + "\n")
         logging.info(label_all_groups.to_string())
     
@@ -1223,7 +1234,6 @@ def main():
     score = 'tailor'
     random_h2h = True
     account_mods = True
-    #print_scan_mult = True
     precursor_bin_width = 1.0005079/4
     adaptive = True
     print_chimera = True
@@ -1233,7 +1243,7 @@ def main():
     n_top_groups = 4
     neighbour_remove = True
     thresh = 0.25
-    concat = True
+    #concat = True
     return_filt_search = False
     correction = 1
     n_processes = 1
@@ -1242,6 +1252,7 @@ def main():
     file_root = 'group_walk_results.txt'
     frontier_name = 'frontier_results.txt'
     static_mods = {'C':57.02146}
+    dcy_prefix = 'decoy_'
     
     command_line = ' '.join(sys.argv)
     
@@ -1332,15 +1343,6 @@ def main():
         elif (next_arg == "--thresh"):
             thresh = float(sys.argv[0])  
             sys.argv = sys.argv[1:]
-        elif (next_arg == "--concat"):
-            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
-                concat = True
-            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
-                concat = False
-            else:
-                sys.stderr.write("Invalid argument for --concat")
-                sys.exit(1)
-            sys.argv = sys.argv[1:]
         elif (next_arg == "--return_filt_search"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
                 return_filt_search = True
@@ -1374,6 +1376,9 @@ def main():
         elif (next_arg == "--static_mods"):
             static_mods = parse_static_mods(sys.argv[0])
             sys.argv = sys.argv[1:]
+        elif (next_arg == "--dcy_prefix"):
+            dcy_prefix = str(sys.argv[0])
+            sys.argv = sys.arv[1:]
         else:
             sys.stderr.write("Invalid option (%s).c" % next_arg)
             sys.exit(1)
@@ -1384,6 +1389,11 @@ def main():
     search_file_open = sys.argv[1]
     td_list = sys.argv[2]
     
+    if '.txt' not in file_root:
+        file_root += '.txt'
+    if '.txt' not in frontier_name:
+        frontier_name += '.txt'
+    
     logging.basicConfig(filename=output_dir + "/" + file_root.replace('.txt', '.log.txt'), level=logging.DEBUG, format = '%(levelname)s: %(message)s')
     
     logging.info('Command used: ' + command_line)
@@ -1392,25 +1402,80 @@ def main():
     sys.stderr.write("Successfully read in arguments. \n")
     logging.info("Successfully read in arguments")
     
+    narrow_target_decoys = pd.read_table(search_file_narrow)
+    open_target_decoys = pd.read_table(search_file_open)
+    narrow_target_decoys.columns = narrow_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
+    open_target_decoys.columns = open_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
+
+    
+    
     if score == 'tailor' or score == 'xcorr':
-        tide_used = True
+        check_1 = ('hyperscore' in narrow_target_decoys.columns)
+        check_2 = ('hyperscore' in open_target_decoys.columns)
+        if check_1 & check_2:
+            tide_used = False
+            sys.stderr.write("MS-Fragger output files detected. \n")
+            logging.info("MS-Fragger output files detected.")
+            sys.stderr.write("Using hyperscore. \n")
+            logging.info("Using hyperscore.")
+        elif (not check_1) & (not check_2):
+            tide_used = True
+        else:
+            sys.stderr.write("Hyperscore was detected in one file but not the other. \n")
+            logging.info("Hyperscore was detected in one file but not the other.")
+            logging.info("Both search files should contain hyperscore.")
+            sys.exit("Both search files should contain hyperscore. \n")
     else:
-        tide_used = False
-        sys.stderr.write("MS-Fragger output files detected. \n")
-        logging.info("MS-Fragger output files detected.")
+        check_1 = ('hyperscore' in narrow_target_decoys.columns)
+        check_2 = ('hyperscore' in open_target_decoys.columns)
+        if check_1 and check_2:
+            tide_used = False
+            sys.stderr.write("MS-Fragger output files detected. \n")
+            logging.info("MS-Fragger output files detected.")
+        else:
+            logging.info("--score hyper was specified yet hyperscore was not detected in both search files.")
+            sys.exit("--score hyper was specified yet hyperscore was not detected in both search files. \n")
+        
+   
+    
+    if tide_used:
+        check_1 = any(narrow_target_decoys['protein_id'].str.contains(dcy_prefix))
+        check_2 = any(open_target_decoys['protein_id'].str.contains(dcy_prefix))
+        if check_1 & check_2:
+            logging.info('Concatenated search files detected.')
+            sys.stderr.write('Concatenated search files detected. \n')
+            concat = True
+        elif (not check_1) & (not check_2):
+            logging.info('Separate search files detected.')
+            sys.stderr.write('Separate search files detected. \n')
+            concat = False
+        else:
+            logging.info('Decoy peptides detected in one file, but not detected in the other.')
+            logging.info('Please make both search files contain the PSMs against the target-decoy database, or just the target database.')
+            sys.stderr.write('Decoy peptides detected in one file, but not detected in the other. \n')
+            sys.exit('Please make both search files contain the PSMs against the target-decoy database, or just the target database. \n')
 
+    else:
+        check_1 = any(narrow_target_decoys['protein'].str.contains(dcy_prefix))
+        check_2 = any(open_target_decoys['protein'].str.contains(dcy_prefix))
+        if check_1 & check_2:
+            logging.info('Concatenated search files detected.')
+            sys.stderr.write('Concatenated search files detected. \n')
+            concat = True
+        elif (not check_1) & (not check_2):
+            logging.info('Separate search files detected.')
+            sys.stderr.write('Separate search files detected. \n')
+            concat = False
+        else:
+            logging.info('Decoy peptides detected in one file, but not detected in the other.')
+            logging.info('Please make both search files contain the PSMs against the target-decoy database, or just the target database.')
+            sys.stderr.write('Decoy peptides detected in one file, but not detected in the other. \n')
+            sys.exit('Please make both search files contain the PSMs against the target-decoy database, or just the target database. \n')
+
+    
+    
     if concat:
-        sys.stderr.write("Reading search files. \n")
-        logging.info("Reading search files.")
-        narrow_target_decoys = pd.read_table(search_file_narrow)
-        open_target_decoys = pd.read_table(search_file_open)
-        narrow_target_decoys.columns = narrow_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
-        open_target_decoys.columns = open_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
-
         if tide_used:
-            if 'hyperscore' in narrow_target_decoys.columns:
-                logging.error("Please set --score hyper")
-                sys.exit("Please set --score hyper.\n")
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
         else:
@@ -1421,43 +1486,38 @@ def main():
         open_target_decoys.reset_index(drop = True, inplace = True)
         
     else:
-        narrow_1 = pd.read_table(search_file_narrow)
-        open_1 = pd.read_table(search_file_open)
+        narrow_1 = narrow_target_decoys
+        open_1 = open_target_decoys
         narrow_2 = pd.read_table(search_file_narrow.replace("target", "decoy"))
         open_2 = pd.read_table(search_file_open.replace("target", "decoy"))
         
-        narrow_1.columns = narrow_1.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
-        narrow_2.columns = narrow_2.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
-        open_1.columns = open_1.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
-        open_2.columns = open_2.columns.str.strip().str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_').str.replace('.', '_')
+        narrow_2.columns = narrow_2.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
+        open_2.columns = open_2.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
         
         
         
         #No need for MS-Fragger output as peptide sequence is given without modification
         if tide_used:
-            if 'hyperscore' in narrow_target_decoys.columns:
-                logging.error("Please set --score hyper")
-                sys.exit("Please set --score hyper.\n")
             narrow_1['original_target_sequence'] = narrow_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "")
             open_1['original_target_sequence'] = open_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "")
             
             
             
         if not len(narrow_1.columns) == len(narrow_2.columns):
-            logging.error("search files have different number of columns.")
-            sys.exit("search files have different number of columns.\n")
+            logging.error("Search files have different number of columns.")
+            sys.exit("Search files have different number of columns.\n")
         if not len(open_1.columns) == len(open_2.columns):
-            logging.error("search files have different number of columns.")
-            sys.exit("search files have different number of columns.\n")
+            logging.error("Search files have different number of columns.")
+            sys.exit("Search files have different number of columns.\n")
         if not len(narrow_1.columns.intersection(narrow_2.columns)) == narrow_1.columns.shape[0]:
-            logging.error("search files do not share the same column names.")
-            sys.exit("search files do not share the same column names.\n")
+            logging.error("Search files do not share the same column names.")
+            sys.exit("Search files do not share the same column names.\n")
         if not len(open_1.columns.intersection(open_2.columns)) == open_1.columns.shape[0]:
-            logging.error("search files do not share the same column names.")
-            sys.exit("search files do not share the same column names.\n")
+            logging.error("Search files do not share the same column names.")
+            sys.exit("Search files do not share the same column names.\n")
         
-        sys.stderr.write("concatenating separate searches.\n")
-        logging.info("concatenating separate searches.")
+        sys.stderr.write("Concatenating separate searches.\n")
+        logging.info("Concatenating separate searches.")
         
         narrow_target_decoys = pd.concat([narrow_1, narrow_2])
         open_target_decoys = pd.concat([open_1, open_2])
@@ -1486,15 +1546,15 @@ def main():
 
         narrow_target_decoys.reset_index(drop = True, inplace = True)
         open_target_decoys.reset_index(drop = True, inplace = True)
-        sys.stderr.write("concatenating separate searches complete.\n")
-        logging.info("concatenating separate searches complete.")
+        sys.stderr.write("Concatenating separate searches complete.\n")
+        logging.info("Concatenating separate searches complete.")
         
     if not len(narrow_target_decoys.columns) == len(open_target_decoys.columns):
-        logging.error("concatenating separate searches.")
-        sys.exit("search files have different number of columns.\n")
+        logging.error("Concatenating separate searches.")
+        sys.exit("Search files have different number of columns.\n")
     if not all([narrow_target_decoys.columns[i] == open_target_decoys.columns[i] for i in range(len(narrow_target_decoys.columns))]):
-        logging.error("search files do not share the same column names.")
-        sys.exit("search files do not share the same column names.\n")
+        logging.error("Search files do not share the same column names.")
+        sys.exit("Search files do not share the same column names.\n")
     
     if not tide_used:
         sys.stderr.write("Rewriting peptide sequence in tide-search format. \n")
@@ -1504,6 +1564,7 @@ def main():
         logging.info("Rewriting peptide sequence in tide-search format complete.")
         sys.stderr.write("Rewriting peptide sequence in tide-search format complete. \n")
         
+    
     target_decoys_all = filter_narrow_open(narrow_target_decoys, open_target_decoys, tops_open, thresh, n_processes, neighbour_remove, tide_used, static_mods)
     
     if return_filt_search:
