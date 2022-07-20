@@ -621,7 +621,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     #indeed it makes sense to use xcorr_score over tailor score, as tailor_score uses candidate PSMs to 
     #normalise the xcorr_score - this differs from narrow to open. 
     if tide_used:
-        target_decoys_all = target_decoys_all.sort_values(by=['scan', 'xcorr_score'], ascending = False)
+        target_decoys_all = target_decoys_all.sort_values(by=['file', 'scan', 'xcorr_score'], ascending = False)
     else:
         target_decoys_all = target_decoys_all.sort_values(by=['scannum', 'hyperscore'], ascending = False)
     target_decoys_all.reset_index(drop = True, inplace = True)
@@ -638,7 +638,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     if n_processes == 1:
         tqdm.pandas()
         if tide_used:
-            results = target_decoys_all.groupby('scan').progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods))
+            results = target_decoys_all.groupby(['file', 'scan']).progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods))
         else:
             results = target_decoys_all.groupby('scannum').progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods))
         results = results.sort_index(ascending = False)
@@ -666,7 +666,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
             def filter_scan_subset(df, q, task_number, return_dict):
                 sys.stderr.write("Starting Process " + str(task_number) + " \n")
                 logging.info("Starting Process " + str(task_number))
-                results = df.groupby('scan').apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+                results = df.groupby(['file', 'scan']).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
                 results = results.sort_index(ascending = False)
                 results = results.apply(pd.Series).stack().reset_index()
                 return_dict[task_number] = results[0]
@@ -674,7 +674,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
                 logging.info("Starting Process " + str(task_number) + " finished")
                 
             def listener(q):
-                pbar = tqdm(total = sum([len(j.groupby('scan')) for j in list_of_df]))
+                pbar = tqdm(total = sum([len(j.groupby(['file', 'scan'])) for j in list_of_df]))
                 for item in iter(q.get, None):
                     pbar.update(item)
         else:
@@ -815,8 +815,8 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     
     #creating PSM column to uniquely identify the PSMs
     if tide_used:
-        decoys_open.loc[:, 'scan_plus_seq'] = decoys_open['scan'].astype(str) + ' ' + decoys_open['sequence']
-        targets_open.loc[:, 'scan_plus_seq'] = targets_open['scan'].astype(str) + ' ' + targets_open['sequence']
+        decoys_open.loc[:, 'scan_plus_seq'] = decoys_open['file'].astype(str) + decoys_open['scan'].astype(str) + ' ' + decoys_open['sequence']
+        targets_open.loc[:, 'scan_plus_seq'] = decoys_open['file'].astype(str) + targets_open['scan'].astype(str) + ' ' + targets_open['sequence']
     else:
         decoys_open.loc[:, 'scan_plus_seq'] = decoys_open['scannum'].astype(str) + ' ' + decoys_open['sequence']
         targets_open.loc[:, 'scan_plus_seq'] = targets_open['scannum'].astype(str) + ' ' + targets_open['sequence']
@@ -824,7 +824,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     #creating PSM column to uniquely identify the PSMs
     target_decoys_narrow_TDC.reset_index(drop = True, inplace = True)
     if tide_used:
-        target_decoys_narrow_TDC.loc[:,'scan_plus_seq'] = target_decoys_narrow_TDC['scan'].astype(str) + ' ' + target_decoys_narrow_TDC['sequence']
+        target_decoys_narrow_TDC.loc[:,'scan_plus_seq'] = target_decoys_narrow_TDC['file'].astype(str) + target_decoys_narrow_TDC['scan'].astype(str) + ' ' + target_decoys_narrow_TDC['sequence']
     else:
         target_decoys_narrow_TDC.loc[:,'scan_plus_seq'] = target_decoys_narrow_TDC['scannum'].astype(str) + ' ' + target_decoys_narrow_TDC['sequence']
     
@@ -862,7 +862,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     #take subset of narrow PSMs that contain the target PSMs in the open
     #reorder this set so that they match the target PSMs in the open
     target_decoys_narrow_sub = target_decoys_narrow_TDC[target_decoys_narrow_TDC['scan_plus_seq'].isin(unique_scan_plus_seq_targets_sub)].copy()
-    target_decoys_narrow_sub= target_decoys_narrow_sub.reset_index(drop = True)
+    target_decoys_narrow_sub = target_decoys_narrow_sub.reset_index(drop = True)
     target_decoys_narrow_sub.scan_plus_seq = target_decoys_narrow_sub.scan_plus_seq.astype("category")
     target_decoys_narrow_sub.scan_plus_seq.cat.set_categories(scan_plus_seq_targets_sub, inplace = True)
     target_decoys_narrow_sub.reset_index(drop = True, inplace = True)
@@ -1017,8 +1017,16 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
         scan[Ws] = targets['scannum'][Ws]
         scan[Ds] = decoys['scannum'][Ds]
     
+    file = pd.Series([0]*len(winning_scores))
+    if tide_used:
+        file[Ws] = targets['file'][Ws]
+        file[Ds] = decoys['file'][Ds]
+    
     #collect information regarding winning peptide
-    df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan'])
+    if tide_used:
+        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'file'])
+    else:
+        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan'])
     df = df.loc[random.sample(range(df.shape[0]), df.shape[0])]
     
     #creating bins for the mass differences
@@ -1152,7 +1160,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     logging.info("Constructing groups is complete.")
     sys.stderr.write("Constructing groups is complete.\n")   
     
-    return df[['winning_scores', 'labels', 'all_group_ids', 'winning_peptides', 'scan', 'database']]
+    return(df)
         
 
 ###############################################################################     
@@ -1471,8 +1479,6 @@ def main():
             logging.info('Please make both search files contain the PSMs against the target-decoy database, or just the target database.')
             sys.stderr.write('Decoy peptides detected in one file, but not detected in the other. \n')
             sys.exit('Please make both search files contain the PSMs against the target-decoy database, or just the target database. \n')
-
-    
     
     if concat:
         if tide_used:
@@ -1522,9 +1528,15 @@ def main():
         narrow_target_decoys = pd.concat([narrow_1, narrow_2])
         open_target_decoys = pd.concat([open_1, open_2])
         
+        narrow_target_decoys = narrow_target_decoys.reset_index(drop = True)
+        open_target_decoys = open_target_decoys.reset_index(drop = True)
+        
+        narrow_target_decoys = narrow_target_decoys.loc[random.sample(range(narrow_target_decoys.shape[0]), narrow_target_decoys.shape[0])]
+        open_target_decoys = open_target_decoys.loc[random.sample(range(open_target_decoys.shape[0]), open_target_decoys.shape[0])]
+        
         if tide_used:
-            narrow_target_decoys = narrow_target_decoys.sort_values(by=['scan', 'xcorr_score'], ascending=False)
-            open_target_decoys = open_target_decoys.sort_values(by=['scan', 'xcorr_score'], ascending=False)
+            narrow_target_decoys = narrow_target_decoys.sort_values(by=['file', 'scan', 'xcorr_score'], ascending=False)
+            open_target_decoys = open_target_decoys.sort_values(by=['file', 'scan', 'xcorr_score'], ascending=False)
         else:
             narrow_target_decoys = narrow_target_decoys.sort_values(by=['scannum', 'hyperscore'], ascending=False)
             open_target_decoys = open_target_decoys.sort_values(by=['scannum', 'hyperscore'], ascending=False)
@@ -1533,13 +1545,17 @@ def main():
         open_target_decoys = open_target_decoys.reset_index(drop = True)
         
         if tide_used:
-            narrow_target_decoys = narrow_target_decoys.assign(xcorr_rank = narrow_target_decoys.groupby('scan').scan.transform(lambda x: range(1, len(x) + 1)))
-            open_target_decoys = open_target_decoys.assign(xcorr_rank = open_target_decoys.groupby('scan').scan.transform(lambda x: range(1, len(x) + 1)))
+            narrow_target_decoys['xcorr_rank'] = narrow_target_decoys.groupby(["file", "scan"])["xcorr_score"].rank("first", ascending=False)
+            #narrow_target_decoys = narrow_target_decoys.assign(xcorr_rank = narrow_target_decoys.groupby(['file', 'scan']).scan.transform(lambda x: range(1, len(x) + 1)))
+            #open_target_decoys = open_target_decoys.assign(xcorr_rank = open_target_decoys.groupby(['file', 'scan']).scan.transform(lambda x: range(1, len(x) + 1)))
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
+            open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["file", "scan"])["xcorr_score"].rank("first", ascending=False)
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
         else:
-            narrow_target_decoys = narrow_target_decoys.assign(xcorr_rank = narrow_target_decoys.groupby('scannum').scan.transform(lambda x: range(1, len(x) + 1)))
-            open_target_decoys = open_target_decoys.assign(xcorr_rank = open_target_decoys.groupby('scannum').scan.transform(lambda x: range(1, len(x) + 1)))
+            narrow_target_decoys['hit_rank'] = narrow_target_decoys.groupby('scan')["hyperscore"].rank("first", ascending=False)
+            open_target_decoys['hit_rank'] = open_target_decoys.groupby('scan')["hyperscore"].rank("first", ascending=False)
+            #narrow_target_decoys = narrow_target_decoys.assign(xcorr_rank = narrow_target_decoys.groupby('scannum').scan.transform(lambda x: range(1, len(x) + 1)))
+            #open_target_decoys = open_target_decoys.assign(xcorr_rank = open_target_decoys.groupby('scannum').scan.transform(lambda x: range(1, len(x) + 1)))
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['hit_rank'] == 1]
             open_target_decoys = open_target_decoys[open_target_decoys['hit_rank'].isin(range(1, tops_open + 1))]
             
@@ -1591,17 +1607,32 @@ def main():
     sys.stderr.write(str(power_5) + " peptides discovered at the 5% FDR level. \n")
     
     if print_chimera:
-        scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].value_counts().value_counts()
-        logging.info("Printing the scan multiplicity among the discovered peptides at 1% FDR level:")
-        logging.info(scan_mult1.to_string())
-        sys.stderr.write("Printing the scan multiplicity among the discovered peptides at 1% FDR level: \n")
-        sys.stderr.write(scan_mult1.to_string() + "\n")
-        
-        scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].value_counts().value_counts()
-        logging.info("Printing the scan multiplicity among the discovered peptides at 5% FDR level:")
-        logging.info(scan_mult5.to_string())
-        sys.stderr.write("Printing the scan multiplicity among the discovered peptides at 5% FDR level: \n")
-        sys.stderr.write(scan_mult5.to_string() + "\n")
+        if tide_used:
+            scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan']]).value_counts().value_counts()
+            scan_mult1.rename_axis('Scan multiplicity')
+            
+            logging.info("Printing the scan multiplicities among the discovered peptides at 1% FDR level:")
+            logging.info(scan_mult1.to_string())
+            sys.stderr.write("Printing the scan multiplicities among the discovered peptides at 1% FDR level: \n")
+            sys.stderr.write(scan_mult1.to_string() + "\n")
+            
+            scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan']]).value_counts().value_counts()
+            logging.info("Printing the scan multiplicities among the discovered peptides at 5% FDR level:")
+            logging.info(scan_mult5.to_string())
+            sys.stderr.write("Printing the scan multiplicities among the discovered peptides at 5% FDR level: \n")
+            sys.stderr.write(scan_mult5.to_string() + "\n")
+        else:
+            scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+            logging.info("Printing the scan multiplicities among the discovered peptides at 1% FDR level:")
+            logging.info(scan_mult1.to_string())
+            sys.stderr.write("Printing the scan multiplicities among the discovered peptides at 1% FDR level: \n")
+            sys.stderr.write(scan_mult1.to_string() + "\n")
+            
+            scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+            logging.info("Printing the scan multiplicities among the discovered peptides at 5% FDR level:")
+            logging.info(scan_mult5.to_string())
+            sys.stderr.write("Printing the scan multiplicities among the discovered peptides at 5% FDR level: \n")
+            sys.stderr.write(scan_mult5.to_string() + "\n")
         
     if output_dir != './':
         if os.path.isdir(output_dir):
