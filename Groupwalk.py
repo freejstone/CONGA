@@ -21,7 +21,7 @@ from tqdm import tqdm
 #import re
 
 
-USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
+USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
 
   This program implements the Group-walk algorithm, including the
   creation of groups and the filtering procedure that eliminates
@@ -30,7 +30,10 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
   output, and the last input file contains the target-decoy peptide
   pairs. Output is a list of PSMs and their corresponding q-values.
   The input search files can be either tab-delimited Tide search files
-  or tab-delimited .tsv files from MS-Fragger. The output file is a
+  or tab-delimited .tsv files from MS-Fragger. Last input file is not 
+  required if the search files come from tide search and there is no 
+  variable modification, or user is not interested in accounting for 
+  variable modifications for the purpose of FDR control. The output file is a
   tab-delimited .txt file containing the following information about the PSMs
   used by groupwalk: the peptide sequence, the scan number, the 
   score, the target-decoy label, whether the PSM came from the narrow
@@ -65,18 +68,20 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
                           'hyper' it is assumed the search files are
                           derived from MS-Fragger.
                           Default = 'tailor'.
-
-    --random_h2h <T|F>    To determine whether target-decoy head-to-head
-                          competition uses a random selection in case of
-                          ties (or deletes both target and decoy from
-                          consideration).
-                          Default = T.
     
     --account_mods <T|F>  To determine whether the group-walk algorithm
                           selects the best PSM among the equivalent
                           classes of peptides which are equal up to
                           variable modification, or not.
                           Default = T.
+                          
+    --return_all_mods <T|F>         (Not added yet) If --account_mods T and
+                                    --return_all_mods T, all target
+                                    peptides equal to a peptide up to
+                                    variable modification used in the
+                                    group-walk algorithm will also
+                                    be reported with the same q-value.
+                                    Default = F.
                           
     --precursor_bin_width <value>   To determine the size of the bins
                                     used to create discretize the mass-
@@ -163,6 +168,9 @@ USAGE = """USAGE: Groupwalk.py <narrow> <wide> <matching>
                                 
     --dcy_prefix <string>       The prefix used for the decoy proteins.
                                 Default = 'decoy_'
+                                
+    --seed <int>          Set random seed.
+                          Default = None.
             
 """
 
@@ -376,57 +384,30 @@ def get_similarity(list1, charges1, list2, charges2, frag_bin_size = 0.05, stati
         similarity_out.append(similarity)
   return(peptide_out_1, peptide_out_2, similarity_out)
 ###############################################################################
-""" 
-def get_similarity_MS(list1, mods1, charges1, list2, mods2, charges2, frag_bin_size = 0.05):
-  
-  peptide_out_1 = []
-  peptide_out_2 = []
-  similarity_out = []
-  start_index = 0
-
-  # Compare each pair of peptides.
-  num_pairs = 0
-  num_printed = 0
-  for index1 in range(0, len(list1)):
-    peptide1 = list1[index1]
-    mod1 = mods1[index1]
-    (unmodified_peptide1, peptide1_mods) \
-       = parse_mods_for_MS_fragger(peptide1, mod1)
-
-    for index2 in range(start_index, len(list2)):
-      peptide2 = list2[index2]
-      mod2 = mods2[index2]
-      num_pairs += 1
-
-
-      # Don't bother if they are the same peptide.
-      if (peptide1.replace("I", "L") == peptide2.replace("I", "L")):
-        peptide_out_1.append(peptide1)
-        peptide_out_2.append(peptide2)
-        similarity_out.append(1.0)
-      else:
-         
-        (unmodified_peptide2, peptide2_mods) \
-         = parse_mods_for_MS_fragger(peptide2, mod2)
-         
-        charge1 = charges1[index1]
-        charge2 = charges2[index2]
-
-        similarity = calc_proportion_fragments_incommon(
-          unmodified_peptide1, peptide1_mods, 0.0, 0.0,
-          unmodified_peptide2, peptide2_mods, 0.0, 0.0,
-          frag_bin_size, charge1, charge2)
-        
-
-        num_printed += 1
-        
-        peptide_out_1.append(peptide1)
-        peptide_out_2.append(peptide2)
-        similarity_out.append(similarity)
-  return(peptide_out_1, peptide_out_2, similarity_out)
-"""
-###############################################################################
 def group_walk(winning_scores, labels, all_group_ids, K = 40, return_frontier = False, correction = 1):
+    '''
+    
+
+    Parameters
+    ----------
+    winning_scores : list
+        A list of winning scores associated to each PSM.
+    labels : list
+        A list of winning labels indicating a target or decoy win associated to each PSM.
+    all_group_ids : list
+        A list of group ids associated to each PSM.
+    K : int, optional
+        Window size used to estimate the probability the next PSM is a target or decoy in each group. The default is 40.
+    return_frontier : bool, optional
+        Whether the entire sequence of frontiers is returned. The default is False.
+    correction : int, optional
+        The additional term used in the numerator to estimate the FDR. The default is 1.
+
+    Returns
+    -------
+    None.
+
+    '''
     if not (len(winning_scores) == len(labels) == len(all_group_ids)):
         logging.error("winning_scores, labels, all_group_ids are not of the same length.")
         sys.exit("winning_scores, labels, all_group_ids are not of the same length.")
@@ -564,6 +545,27 @@ def group_walk(winning_scores, labels, all_group_ids, K = 40, return_frontier = 
 ###############################################################################
 #This appears to work perfectly fine
 def filter_scan(search_df, thresh = 0.25, frag_bin_size = 0.05, static_mods = {'C':57.02146}):
+    '''
+
+
+    Parameters
+    ----------
+    search_df : Pandas Dataframe
+        Dataframe containing just one scan, and multiple PSMs.
+    thresh : float, optional
+        The similarity score threshold used to filter neighbouring PSMs. The default is 0.25.
+    frag_bin_size : float, optional
+        Size of m/z bins used to determine the shared number of b- and y-ions. The default is 0.05.
+    static_mods : dic, optional
+        Dictionary containing all static modifications. The default is {'C':57.02146}.
+
+    Returns
+    -------
+    drop_scan : list
+        A list of booleans indicating which PSMs should be filtered.
+
+    '''
+    
     search_df = search_df.reset_index(drop = True)
     n_scans = search_df.shape[0]
     
@@ -717,62 +719,97 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, open_top = 2, t
     return target_decoys_all
 ###############################################################################
 
-def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40, tops = 2, score = 'tailor', random_h2h = True, account_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = True, print_group_pi0 = True):
+def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix = 'decoy_', K = 40, tops = 2, score = 'tailor', account_mods = True, any_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = True, print_group_pi0 = True):
+    '''
     
+
+    Parameters
+    ----------
+    target_decoys : Pandas Dataframe
+        Dataframe of target-decoy PSMs from both open/narrow searches after neighbour-filtering
+    narrow_target_decoys : Pandas Dataframe
+        Dataframe of target-decoy PSMs taken directly from the narrow search file.
+    peptide_list : Pandas Dataframe or string
+        Dataframe of target-decoy pairs, else an empty string.
+    dcy_prefix : string, optional
+        Decoy prefix used in the protein database. The default is 'decoy_'.
+    K : string, optional
+        Window size used to estimate the probability the next PSM is a target or decoy in each group. The default is 40.
+    tops : int, optional
+        The number of top-ranked PSMs in the open search to use. The default is 2.
+    score : string, optional
+        Which score type is used. The default is 'tailor'.
+    account_mods : bool, optional
+        Whether winning PSMs are defined up to variable modification or not. The default is True.
+    any_mods : bool, optional
+        Whether there exists any variable modifications. The default is True.
+    precursor_bin_width : float, optional
+        The bin width used to bin the mass differences in open search. The default is 1.0005079/4.
+    group_thresh : float, optional
+        The p-value threshold used to agglomerate groups. The default is 0.01.
+    adaptive : bool, optional
+        Whether to use an adaptive grouping scheme according to the KS test or a fixed method. The default is True.
+    min_group_size : int, optional
+        The number of multiples of K that the used to determine the minimum size of each group. The default is 2.
+    n_top_groups : int, optional
+        If adaptive = False, then n_top_groups is the number of top mass differences used in creating the groups. The default is 4.
+    tide_used : bool, optional
+        Whether tide-search is used or not. The default is True.
+    print_group_pi0 : bool, optional
+        Whether to print the within-group decoy-target ratio to console. The default is True.
+
+    Returns
+    -------
+    Dataframe containing the winning PSMs after head-to-head competition and their group labels.
+
+    '''
     #take only the top 1 from the narrow search
     if tide_used:
-        target_decoys_narrow_TDC = target_decoys_narrow_TDC[target_decoys_narrow_TDC['xcorr_rank'] == 1]
+        narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
     else:
-        target_decoys_narrow_TDC = target_decoys_narrow_TDC[target_decoys_narrow_TDC['hit_rank'] == 1]
-    target_decoys_narrow_TDC.loc[:, 'database'] = 'narrow'
+        narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['hit_rank'] == 1]
+    narrow_target_decoys.loc[:, 'database'] = 'narrow'
     
-    #rounding in case of any numerical issues from previous filterings
+    #rounding in case of any numerical issues
     if score == 'tailor':
         target_decoys['tailor_score'] = round(target_decoys['tailor_score'], 8)
-        target_decoys_narrow_TDC['tailor_score'] = round(target_decoys_narrow_TDC['tailor_score'], 8)
+        narrow_target_decoys['tailor_score'] = round(narrow_target_decoys['tailor_score'], 8)
     elif score == 'xcorr':
         target_decoys['xcorr_score'] = round(target_decoys['xcorr_score'], 8)
-        target_decoys_narrow_TDC['xcorr_score'] = round(target_decoys_narrow_TDC['xcorr_score'], 8)
+        narrow_target_decoys['xcorr_score'] = round(narrow_target_decoys['xcorr_score'], 8)
     elif score == 'hyper':
         target_decoys['hyperscore'] = round(target_decoys['hyperscore'], 8)
-        target_decoys_narrow_TDC['hyperscore'] = round(target_decoys_narrow_TDC['hyperscore'], 8)
+        narrow_target_decoys['hyperscore'] = round(narrow_target_decoys['hyperscore'], 8)
     
     logging.info("Doing head to head competition.")
     sys.stderr.write("Doing head to head competition.\n")
     
+    #take the open and narrow PSMs
     target_decoys_open = target_decoys[target_decoys['database'] == "open"]
     target_decoys_narrow = target_decoys[target_decoys['database'] == "narrow"]
 
-
     if tide_used:
+        #get target and decoys separately
         targets_narrow = target_decoys_narrow[( target_decoys_narrow['target_decoy'] == 'target' )]
         decoys_narrow = target_decoys_narrow[( target_decoys_narrow['target_decoy'] == 'decoy' )]
-         #taking the top "tops" PSMs from the open search
+        #taking the top ranked PSMs from the open search as specified by user - nominally top 2
         targets_open = target_decoys_open[( target_decoys_open['target_decoy'] == 'target' ) & ( target_decoys_open['xcorr_rank'].isin(range(1, tops + 1)) )]
         decoys_open = target_decoys_open[( target_decoys_open['target_decoy'] == 'decoy' ) & ( target_decoys_open['xcorr_rank'].isin(range(1, tops + 1)) )]    
         
     else:
-        targets_narrow = target_decoys_narrow[target_decoys_narrow['sequence'].isin(peptide_list['target'])].copy()
-        decoys_narrow = target_decoys_narrow[target_decoys_narrow['sequence'].isin(peptide_list['decoy'])].copy()
-        #targets_narrow = target_decoys_narrow[( target_decoys_narrow['peptide'].isin(peptide_list['target'].str.replace("\\[|\\]|\\.|\d+", "")) )]
-        #decoys_narrow = target_decoys_narrow[( target_decoys_narrow['peptide'].isin(peptide_list['decoy'].str.replace("\\[|\\]|\\.|\d+", "")) )]
+        #get target and decoys separately
+        targets_narrow = target_decoys_narrow[~(target_decoys_narrow['protein'].str.contains(dcy_prefix))].copy()
+        decoys_narrow = target_decoys_narrow[(target_decoys_narrow['protein'].str.contains(dcy_prefix))].copy()
         targets_narrow.loc[:, 'target_decoy'] = 'target'
         decoys_narrow.loc[:, 'target_decoy'] = 'decoy'
         
-        targets_open = target_decoys_open[( target_decoys_open['sequence'].isin(peptide_list['target']) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )].copy()
-        decoys_open = target_decoys_open[( target_decoys_open['sequence'].isin(peptide_list['decoy']) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )].copy()  
-        
-        #targets_open = target_decoys_open[( target_decoys_open['peptide'].isin(peptide_list['target'].str.replace("\\[|\\]|\\.|\d+", "")) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )]
-        #decoys_open = target_decoys_open[( target_decoys_open['peptide'].isin(peptide_list['decoy'].str.replace("\\[|\\]|\\.|\d+", "")) ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )]    
+        #taking the top ranked PSMs from the open search as specified by user - nominally top 2
+        targets_open = target_decoys_open[(~( target_decoys_open[target_decoys_open['protein'].str.contains(dcy_prefix)] )) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )].copy()
+        decoys_open = target_decoys_open[( target_decoys_open[target_decoys_open['protein'].str.contains(dcy_prefix)] ) & ( target_decoys_open['hit_rank'].isin(range(1, tops + 1)) )].copy()  
         targets_open.loc[:, 'target_decoy'] = 'target'
         decoys_open.loc[:, 'target_decoy'] = 'decoy'
-        
-        #decoys_open['sequence_plus_variable_mods'] = decoys_open['peptide'] + decoys_open['modification_info']
-        #targets_open['sequence_plus_variable_mods'] = targets_open['peptide'] + targets_open['modification_info']
-        #decoys_narrow['sequence_plus_variable_mods'] = decoys_narrow['peptide'] + decoys_narrow['modification_info']
-        #targets_narrow['sequence_plus_variable_mods'] = targets_narrow['peptide'] + targets_narrow['modification_info']
-        
-    #sorting PSMs by their score and deleting duplicate PSMs that share the same sequence (up to variable modification if account_mods == True)
+            
+    #sorting PSMs by their score
     if score == 'tailor':
         decoys_open = decoys_open.sort_values(by=['tailor_score'], ascending=False)
         targets_open = targets_open.sort_values(by=['tailor_score'], ascending=False)
@@ -790,6 +827,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
         targets_narrow = targets_narrow.sort_values( by=['hyperscore'], ascending=False)
     if account_mods:
         if tide_used:
+            #taking best PSM score up to variable modification in each of the database
             decoys_open = decoys_open.drop_duplicates(subset = ['original_target_sequence'])
             targets_open = targets_open.drop_duplicates(subset = ['original_target_sequence'])
             decoys_narrow = decoys_narrow.drop_duplicates(subset = ['original_target_sequence'])
@@ -801,7 +839,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
             decoys_narrow = decoys_narrow.drop_duplicates(subset = ['peptide'])
             targets_narrow = targets_narrow.drop_duplicates(subset = ['peptide'])
     else:
-        #sequence is both unique for MS_fragger and tide-search results
+        #taking best PSM score up to sequence in each of the database
         decoys_open = decoys_open.drop_duplicates(subset = ['sequence'])
         targets_open = targets_open.drop_duplicates(subset = ['sequence'])
         decoys_narrow = decoys_narrow.drop_duplicates(subset = ['sequence'])
@@ -813,7 +851,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     decoys_narrow.reset_index(drop = True, inplace = True)
     targets_narrow.reset_index(drop = True, inplace = True)
     
-    #creating PSM column to uniquely identify the PSMs
+    #creating PSM column to uniquely identify the PSMs in the open search
     if tide_used:
         decoys_open.loc[:, 'scan_plus_seq'] = decoys_open['file'].astype(str) + decoys_open['scan'].astype(str) + ' ' + decoys_open['sequence']
         targets_open.loc[:, 'scan_plus_seq'] = decoys_open['file'].astype(str) + targets_open['scan'].astype(str) + ' ' + targets_open['sequence']
@@ -821,17 +859,17 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
         decoys_open.loc[:, 'scan_plus_seq'] = decoys_open['scannum'].astype(str) + ' ' + decoys_open['sequence']
         targets_open.loc[:, 'scan_plus_seq'] = targets_open['scannum'].astype(str) + ' ' + targets_open['sequence']
 
-    #creating PSM column to uniquely identify the PSMs
-    target_decoys_narrow_TDC.reset_index(drop = True, inplace = True)
+    #creating PSM column to uniquely identify the PSMs in the narrow search
+    narrow_target_decoys.reset_index(drop = True, inplace = True)
     if tide_used:
-        target_decoys_narrow_TDC.loc[:,'scan_plus_seq'] = target_decoys_narrow_TDC['file'].astype(str) + target_decoys_narrow_TDC['scan'].astype(str) + ' ' + target_decoys_narrow_TDC['sequence']
+        narrow_target_decoys.loc[:,'scan_plus_seq'] = narrow_target_decoys['file'].astype(str) + narrow_target_decoys['scan'].astype(str) + ' ' + narrow_target_decoys['sequence']
     else:
-        target_decoys_narrow_TDC.loc[:,'scan_plus_seq'] = target_decoys_narrow_TDC['scannum'].astype(str) + ' ' + target_decoys_narrow_TDC['sequence']
+        narrow_target_decoys.loc[:,'scan_plus_seq'] = narrow_target_decoys['scannum'].astype(str) + ' ' + narrow_target_decoys['sequence']
     
     #translating into an iterable
-    unique_scan_seq_td_narrow = set(target_decoys_narrow_TDC['scan_plus_seq'])
+    unique_scan_seq_td_narrow = set(narrow_target_decoys['scan_plus_seq'])
     
-    #decoy/target PSMs open geta ssigned "narrow" database if they exist in the narrow search
+    #decoy/target PSMs open get assigned "narrow" database if they exist in the narrow search
     decoys_open.loc[decoys_open['scan_plus_seq'].isin(unique_scan_seq_td_narrow), 'database'] = 'narrow'    
     targets_open.loc[targets_open['scan_plus_seq'].isin(unique_scan_seq_td_narrow), 'database'] = 'narrow'
     
@@ -844,8 +882,8 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     unique_scan_plus_seq_targets_sub = set(scan_plus_seq_targets_sub)
     
     #take subset of narrow PSMs that contain the decoy PSMs in the open
-    #reorder this sset so that they match the decoy PSMs in the open
-    target_decoys_narrow_sub = target_decoys_narrow_TDC[target_decoys_narrow_TDC['scan_plus_seq'].isin(unique_scan_plus_seq_decoys_sub)].copy()
+    #reorder this set so that they match the decoy PSMs in the open
+    target_decoys_narrow_sub = narrow_target_decoys[narrow_target_decoys['scan_plus_seq'].isin(unique_scan_plus_seq_decoys_sub)].copy()
     target_decoys_narrow_sub.reset_index(drop = True, inplace = True)
     target_decoys_narrow_sub.scan_plus_seq = target_decoys_narrow_sub.scan_plus_seq.astype("category")
     target_decoys_narrow_sub.scan_plus_seq.cat.set_categories(scan_plus_seq_decoys_sub, inplace = True)
@@ -861,7 +899,7 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     
     #take subset of narrow PSMs that contain the target PSMs in the open
     #reorder this set so that they match the target PSMs in the open
-    target_decoys_narrow_sub = target_decoys_narrow_TDC[target_decoys_narrow_TDC['scan_plus_seq'].isin(unique_scan_plus_seq_targets_sub)].copy()
+    target_decoys_narrow_sub = narrow_target_decoys[narrow_target_decoys['scan_plus_seq'].isin(unique_scan_plus_seq_targets_sub)].copy()
     target_decoys_narrow_sub = target_decoys_narrow_sub.reset_index(drop = True)
     target_decoys_narrow_sub.scan_plus_seq = target_decoys_narrow_sub.scan_plus_seq.astype("category")
     target_decoys_narrow_sub.scan_plus_seq.cat.set_categories(scan_plus_seq_targets_sub, inplace = True)
@@ -875,159 +913,141 @@ def create_groups(target_decoys, target_decoys_narrow_TDC, peptide_list, K = 40,
     elif score == 'hyper':
         targets_open.loc[targets_open['scan_plus_seq'].isin(unique_scan_seq_td_narrow), 'hyperscore'] = list(target_decoys_narrow_sub.sort_values(['scan_plus_seq'])['hyperscore'])
         
-        
-    #concatenate the open and narrow search PSMs and delete any remaining duplicated sequences (up to variable modification if account_mods == True)
-    #narrow takes precedence always, regardless of score
+    
+    #rejoining the decoys and targets from the two databases
+    #note if account_mods = T, this will still mean that PSMs are not unique up to variable mod from the two databases
+    #note if account_mods = F, this will still mean that PSMs are not unique up to sequence from the two databases.
     decoys = pd.concat([decoys_narrow, decoys_open])
     targets = pd.concat([targets_narrow, targets_open])
     
-    decoys = decoys.sort_values(by=['database'])
-    targets = targets.sort_values(by=['database'])
-    
-    if account_mods:
-        if tide_used:            
-            decoys = decoys.drop_duplicates(subset = ['original_target_sequence'])
-            targets = targets.drop_duplicates(subset = ['original_target_sequence'])
+    if tide_used:
+        if account_mods or (not any_mods):
+            #combine targets/decoys
+            target_decoys_final = pd.concat([targets, decoys])
+            #randomly shuffle order
+            target_decoys_final = target_decoys_final.sample(frac = 1).reset_index(drop=True)
+            
         else:
-            decoys = decoys.drop_duplicates(subset = ['peptide'])
-            targets = targets.drop_duplicates(subset = ['peptide'])
-    else:
-        decoys = decoys.drop_duplicates(subset = ['sequence'])
-        targets = targets.drop_duplicates(subset = ['sequence'])
-
-    peptide_list = peptide_list.drop_duplicates()
-    peptide_list.reset_index(drop = True, inplace = True)
-    
-    #give the indices corresponding the index in peptide_list
-    #then identify indices that have both target and decoy pairs, indices that have one
-    #for indices that have one, produce NA rows
-    decoys.sequence = decoys.sequence.astype("category")
-    decoys.sequence.cat.set_categories(list(peptide_list['decoy'].dropna()), inplace = True)
-    decoys = decoys.sort_values(['sequence'])    
-    
-    targets.sequence = targets.sequence.astype("category")
-    targets.sequence.cat.set_categories(list(peptide_list['target'].dropna()), inplace = True)
-    targets = targets.sort_values(['sequence'])
-    
-    
-    decoy_inds = peptide_list.index[peptide_list['decoy'].isin(decoys.sequence)]
-    target_inds = peptide_list.index[peptide_list['target'].isin(targets.sequence)]
-    pair_inds = list(set(decoy_inds) & set(target_inds))
-    decoy_only_inds = list(set(decoy_inds) - set(pair_inds))
-    target_only_inds = list(set(target_inds) - set(pair_inds))
-    
-    decoys.index = decoy_inds
-    targets.index = target_inds
-    
-    additional_decoy_rows = pd.DataFrame(np.nan, index = target_only_inds, columns = decoys.columns)
-    additional_target_rows = pd.DataFrame(np.nan, index = decoy_only_inds, columns = targets.columns)
-    
-    #do head-to-head competition.
-    #if one of the sequences in the pair does not exist, it gets -Infinity score
-    if score == 'tailor':
-        additional_decoy_rows['tailor_score'] = -float('inf') 
-        additional_target_rows['tailor_score'] = -float('inf') 
-    elif score == "xcorr":
-        additional_decoy_rows['xcorr_score'] = -float('inf') 
-        additional_target_rows['xcorr_score'] = -float('inf') 
-    elif score == "hyper":
-        additional_decoy_rows['hyperscore'] = -float('inf') 
-        additional_target_rows['hyperscore'] = -float('inf') 
-    
-    decoys = decoys.append(additional_decoy_rows)
-    targets = targets.append(additional_target_rows)
-    
-    decoys = decoys.sort_index()
-    targets = targets.sort_index()
-    
-    targets.reset_index(drop = True, inplace = True)
-    decoys.reset_index(drop = True, inplace = True)
-    
-    different_databases = ~(decoys['database'] == targets['database']) & ~targets['database'].isnull() & ~decoys['database'].isnull()
-    
-    if score == 'tailor':
-        targets.loc[different_databases & (targets['database'] == "open"),'tailor_score'] = -float('inf')
-        decoys.loc[different_databases & (decoys['database'] == "open"), 'tailor_score'] = -float('inf')
-    elif score == "xcorr":
-        targets.loc[different_databases & (targets['database'] == "open"),'xcorr_score'] = -float('inf')
-        decoys.loc[different_databases & (decoys['database'] == "open"), 'xcorr_score'] = -float('inf')
-    elif score == "hyper":
-        targets.loc[different_databases & (targets['database'] == "open"),'hyperscore'] = -float('inf')
-        decoys.loc[different_databases & (decoys['database'] == "open"), 'hyperscore'] = -float('inf')
-    
-    if score == 'tailor':
-        decoys_scores = list(decoys['tailor_score'])
-        targets_scores = list(targets['tailor_score'])
-    elif score == 'xcorr':
-        decoys_scores = list(decoys['xcorr_score'])
-        targets_scores = list(targets['xcorr_score'])
-    elif score == 'hyper':
-        decoys_scores = list(decoys['hyperscore'])
-        targets_scores = list(targets['hyperscore'])
-    
-    
-    #Determining indices of winning target peptides, losing target peptides, and ties
-    Ws = [i for i in range(len(decoys_scores)) if decoys_scores[i] < targets_scores[i]]
-    ties = [i for i in range(len(decoys_scores)) if decoys_scores[i] == targets_scores[i]]
-    #break ties randomly or ignore them
-    if random_h2h:
-        Ws_inds = random.choices([False, True], k = len(ties))
-        Ws += [ties[i] for i in range(len(ties)) if Ws_inds[i]]
-        Ds = list(set(range(len(decoys_scores))) - set(Ws))
-    else:
-        Ds = list(set(range(len(decoys_scores))) - set(Ws) - set(ties))
-    winning_scores = [max(l1, l2) for l1, l2 in zip(decoys_scores, targets_scores)]
-    
-    labels = pd.Series([0]*len(winning_scores))
-    labels.loc[Ws] = 1
-    labels[Ds] = -1
-    
-    #targets = targets.reset_index(drop = True)
-    #decoys = decoys.reset_index(drop = True)
-    
-    winning_peptides = pd.Series([0]*len(winning_scores))
-    winning_peptides[Ws] = targets['sequence'][Ws]
-    winning_peptides[Ds] = decoys['sequence'][Ds]
-    
-    rank = pd.Series([0]*len(winning_scores))
-    if tide_used:
-        rank[Ws] = targets['xcorr_rank'][Ws]
-        rank[Ds] = decoys['xcorr_rank'][Ds]
-    else:
-        rank[Ws] = targets['hit_rank'][Ws]
-        rank[Ds] = decoys['hit_rank'][Ds]
-    
-    delta_mass = pd.Series([0]*len(winning_scores))
-    if tide_used:
-        delta_mass[Ws] = targets['spectrum_neutral_mass'][Ws] - targets['peptide_mass'][Ws]
-        delta_mass[Ds] = decoys['spectrum_neutral_mass'][Ds] - decoys['peptide_mass'][Ds]
-    else:
-        delta_mass[Ws] = targets['precursor_neutral_mass'][Ws] - targets['calc_neutral_pep_mass'][Ws]
-        delta_mass[Ds] = decoys['precursor_neutral_mass'][Ds] - decoys['calc_neutral_pep_mass'][Ds]
-    
-    database = pd.Series([0]*len(winning_scores))
-    database[Ws] = targets['database'][Ws]
-    database[Ds] = decoys['database'][Ds]
-    
-    scan = pd.Series([0]*len(winning_scores))
-    if tide_used:
-        scan[Ws] = targets['scan'][Ws]
-        scan[Ds] = decoys['scan'][Ds]
-    else:
-        scan[Ws] = targets['scannum'][Ws]
-        scan[Ds] = decoys['scannum'][Ds]
-    
-    file = pd.Series([0]*len(winning_scores))
-    if tide_used:
-        file[Ws] = targets['file'][Ws]
-        file[Ds] = decoys['file'][Ds]
-    
-    #collect information regarding winning peptide
-    if tide_used:
+            #At this point, there are possibly two PSMs to the same peptide in 'decoys' and 'targets', they 
+            #are the narrow and open version PSMs
+            #Take the narrow PSM
+            decoys = decoys.drop_duplicates(subset = ['sequence'])
+            targets = targets.drop_duplicates(subset = ['sequence'])
+            #we reset index since we refer to the peptide_list to match the corresponding target pairs to
+            #decoys
+            decoys.reset_index(drop = True, inplace = True)
+            targets.reset_index(drop = True, inplace = True)
+            #Changes original_target_sequence to include variable mods
+            targets['original_target_sequence'] = targets['sequence']
+            #peptide_list is required here to pair target-decoys
+            peptide_list_sub = peptide_list[peptide_list['decoy'].isin(decoys['sequence'])].copy()
+            peptide_list_sub.decoy = peptide_list_sub.decoy.astype('category')
+            peptide_list_sub.decoy.cat.set_categories(decoys['sequence'], inplace = True)
+            peptide_list_sub = peptide_list_sub.sort_values(['decoy'])
+            peptide_list_sub.reset_index(drop = True, inplace = True)
+            #find the associated pair for the decoy sequences
+            decoys['original_target_sequence'] = peptide_list_sub['target']
+            
+            #combine targets and decoys
+            target_decoys_final = pd.concat([targets, decoys])
+            #randomly shuffle order, so that ties between targets and decoys are broken
+            target_decoys_final = target_decoys_final.sample(frac = 1).reset_index(drop=True)
+            
+        #order according to database, so narrow always take precedence
+        if score == 'tailor':
+            target_decoys_final = target_decoys_final.sort_values(by=['database', 'tailor_score'], ascending = [True, False])
+        elif score == 'xcorr':
+            target_decoys_final = target_decoys_final.sort_values(by=['database', 'xcorr_score'], ascending = [True, False])
+        
+        #take best PSM up to variable modification, (narrow takes precedence) if account_mods
+        #else take best PSM up to sequence (narrow takes precedence)
+        target_decoys_final = target_decoys_final.drop_duplicates(subset = ['original_target_sequence'])
+        
+        #gather winning information
+        if score == 'tailor':
+            winning_scores = target_decoys_final['tailor_score']
+        elif score == 'xcorr':
+            winning_scores = target_decoys_final['xcorr_score']
+            
+        labels = target_decoys_final['target_decoy'].copy()
+        labels[labels == 'target'] = 1
+        labels[labels == 'decoy'] = -1
+        winning_peptides = target_decoys_final['sequence']
+        rank = target_decoys_final['xcorr_rank']
+        delta_mass = target_decoys_final['spectrum_neutral_mass'] - target_decoys_final['peptide_mass']
+        database = target_decoys_final['database']
+        scan = target_decoys_final['scan']
+        file = target_decoys_final['file']
         df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'file'])
     else:
+        #unnecessary, but in case
+        peptide_list = peptide_list.drop_duplicates()
+        peptide_list.reset_index(drop = True, inplace = True)
+        
+        if account_mods:
+            #Take the narrow PSM between narrow and open up to variable modification.
+            decoys = decoys.drop_duplicates(subset = ['peptide'])
+            targets = targets.drop_duplicates(subset = ['peptide'])
+            
+            #we reset index since we refer to the peptide_list to match the corresponding target pairs to
+            #decoys
+            decoys.reset_index(drop = True, inplace = True)
+            targets.reset_index(drop = True, inplace = True)
+            
+            #create equivalent 'original_target_sequence' column for MS fragger results
+            targets['original_target_sequence'] = targets['peptide']
+            peptide_list_sub = peptide_list[peptide_list['decoy'].isin(decoys['peptide'])]
+            peptide_list_sub.decoy = peptide_list_sub.decoy.astype('category')
+            peptide_list_sub.decoy.cat.set_categories(decoys['peptide'], inplace = True)
+            peptide_list_sub = peptide_list_sub.sort_values(['decoy'])
+            peptide_list_sub.reset_index(drop = True, inplace = True)
+            #find the associated pair for the decoy sequences
+            decoys['original_target_sequence'] = peptide_list_sub['target']
+        else:
+            #Take the narrow PSM between narrow and open equal to the same sequence.
+            decoys = decoys.drop_duplicates(subset = ['sequence'])
+            targets = targets.drop_duplicates(subset = ['sequence'])
+            
+            #we reset index since we refer to the peptide_list to match the corresponding target pairs to
+            #decoys
+            decoys.reset_index(drop = True, inplace = True)
+            targets.reset_index(drop = True, inplace = True)
+            
+            #create 'original_target_sequence' column for MS fragger results on the individual sequence-level
+            targets['original_target_sequence'] = targets['sequence']
+            
+            peptide_list_sub = peptide_list[peptide_list['decoy'].isin(decoys['sequence'])]
+            peptide_list_sub.decoy = peptide_list_sub.decoy.astype('category')
+            peptide_list_sub.decoy.cat.set_categories(decoys['sequence'], inplace = True)
+            peptide_list_sub = peptide_list_sub.sort_values(['decoy'])
+            peptide_list_sub.reset_index(drop = True, inplace = True)
+            #find the associated pair for the decoy sequences
+            decoys['original_target_sequence'] = peptide_list_sub['target']
+            
+        #combine targets/decoys
+        target_decoys_final = pd.concat([targets, decoys])
+        #randomly shuffle order
+        target_decoys_final = target_decoys_final.sample(frac = 1)
+        #do h2h competition by taking the best scoring PSM
+        target_decoys_final = target_decoys_final.sort_values(by=['database', 'hyperscore'], ascending = [True, False])
+        
+        #take best PSM up to variable modification, (narrow takes precedence) if account_mods
+        #else take best PSM up to sequence (narrow takes precedence)
+        target_decoys_final = target_decoys_final.drop_duplicates(subset = ['original_target_sequence'])
+        
+        winning_scores = target_decoys_final['hyperscore']
+        
+        labels = target_decoys_final['target_decoy']
+        labels[labels == 'target'] = 1
+        labels[labels == 'decoy'] = -1
+        winning_peptides = target_decoys_final['sequence']
+        rank = target_decoys_final['hit_rank']
+        delta_mass = target_decoys_final['precursor_neutral_mass'] - target_decoys_final['calc_neutral_pep_mass']
+        database = target_decoys_final['database']
+        scan = target_decoys_final['scannum']
         df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan'])
-    df = df.loc[random.sample(range(df.shape[0]), df.shape[0])]
+        
+    df = df.sample(frac = 1)
     
     #creating bins for the mass differences
     breaks_p = np.arange(0, 100 + 2*precursor_bin_width, precursor_bin_width) - precursor_bin_width/2
@@ -1240,7 +1260,7 @@ def main():
     tops_gw = 2
     tops_open = 5
     score = 'tailor'
-    random_h2h = True
+    #random_h2h = True
     account_mods = True
     precursor_bin_width = 1.0005079/4
     adaptive = True
@@ -1261,13 +1281,14 @@ def main():
     frontier_name = 'frontier_results.txt'
     static_mods = {'C':57.02146}
     dcy_prefix = 'decoy_'
+    seed = None
     
     command_line = ' '.join(sys.argv)
     
     
     # Parse the command line.
     sys.argv = sys.argv[1:]
-    while (len(sys.argv) > 3):
+    while (any('--' in string for string in sys.argv)):
         next_arg = sys.argv[0]
         sys.argv = sys.argv[1:]
         if (next_arg == "--K"):
@@ -1281,15 +1302,6 @@ def main():
             sys.argv = sys.argv[1:]
         elif (next_arg == "--score"):
             score = sys.argv[0]
-            sys.argv = sys.argv[1:]
-        elif (next_arg == "--random_h2h"):
-            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
-                random_h2h = True
-            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
-                random_h2h = False
-            else:
-                sys.stderr.write("Invalid argument for --random_h2h")
-                sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--account_mods"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
@@ -1386,16 +1398,27 @@ def main():
             sys.argv = sys.argv[1:]
         elif (next_arg == "--dcy_prefix"):
             dcy_prefix = str(sys.argv[0])
-            sys.argv = sys.arv[1:]
+            sys.argv = sys.argv[1:]
+        elif (next_arg == '--seed'):
+            seed = int(sys.argv[0])
+            sys.argv = sys.argv[1:]
         else:
             sys.stderr.write("Invalid option (%s).c" % next_arg)
             sys.exit(1)
-    if (len(sys.argv) != 3):
+    if (len(sys.argv) == 2):
+        search_file_narrow = sys.argv[0]
+        search_file_open = sys.argv[1]
+        td_list = ''
+    elif (len(sys.argv) == 3):
+        search_file_narrow = sys.argv[0]
+        search_file_open = sys.argv[1]
+        td_list = sys.argv[2]
+    else:
         sys.stderr.write(USAGE)
         sys.exit(1)
-    search_file_narrow = sys.argv[0]
-    search_file_open = sys.argv[1]
-    td_list = sys.argv[2]
+    
+    if type(seed) == int:
+        random.seed(seed)
     
     if '.txt' not in file_root:
         file_root += '.txt'
@@ -1410,11 +1433,20 @@ def main():
     sys.stderr.write("Successfully read in arguments. \n")
     logging.info("Successfully read in arguments")
     
+    if not account_mods:
+        sys.stderr.write("Warning: no longer accounting for variable modification. FDR control not guaranteed. \n")
+        logging.warning("No longer accounting for variable modification. FDR control not guaranteed.")
+    
+    sys.stderr.write("Reading in search files. \n")
+    logging.info("Reading in search files.")
+    
     narrow_target_decoys = pd.read_table(search_file_narrow)
     open_target_decoys = pd.read_table(search_file_open)
     narrow_target_decoys.columns = narrow_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
     open_target_decoys.columns = open_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
-
+    
+    sys.stderr.write("Successfully read in search files. \n")
+    logging.info("Successfully read in search files.")
     
     
     if score == 'tailor' or score == 'xcorr':
@@ -1488,24 +1520,39 @@ def main():
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['hit_rank'] == 1]
             open_target_decoys = open_target_decoys[open_target_decoys['hit_rank'].isin(range(1, tops_open + 1))]
         
+        #This is redundant currently, as original_target_sequence is being printed WITHOUT modification (but this is a current bug in tide-search, so we run this anyways)
+        narrow_target_decoys['original_target_sequence'] = narrow_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "")
+        open_target_decoys['original_target_sequence'] = open_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "")
+        
         narrow_target_decoys.reset_index(drop = True, inplace = True)
         open_target_decoys.reset_index(drop = True, inplace = True)
         
     else:
         narrow_1 = narrow_target_decoys
         open_1 = open_target_decoys
+        
+        logging.info('Searching for decoy files in same directory.')
+        sys.stderr.write('Searching for decoy files in same directory. \n')
+        
         narrow_2 = pd.read_table(search_file_narrow.replace("target", "decoy"))
         open_2 = pd.read_table(search_file_open.replace("target", "decoy"))
+        
         
         narrow_2.columns = narrow_2.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
         open_2.columns = open_2.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
         
-        
+        logging.info('Successfully read in decoy search files.')
+        sys.stderr.write('Successfully read in decoy search files. \n')
         
         #No need for MS-Fragger output as peptide sequence is given without modification
+        #We will create a version of original_target_sequence in create_groups function
+        #if user wishes to do sequence-level competition when modifications exist
         if tide_used:
             narrow_1['original_target_sequence'] = narrow_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "")
             open_1['original_target_sequence'] = open_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "")
+            narrow_2['original_target_sequence'] = narrow_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "")
+            open_2['original_target_sequence'] = open_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "")
+            
             
             
             
@@ -1531,8 +1578,8 @@ def main():
         narrow_target_decoys = narrow_target_decoys.reset_index(drop = True)
         open_target_decoys = open_target_decoys.reset_index(drop = True)
         
-        narrow_target_decoys = narrow_target_decoys.loc[random.sample(range(narrow_target_decoys.shape[0]), narrow_target_decoys.shape[0])]
-        open_target_decoys = open_target_decoys.loc[random.sample(range(open_target_decoys.shape[0]), open_target_decoys.shape[0])]
+        narrow_target_decoys = narrow_target_decoys.sample(frac = 1)
+        open_target_decoys = open_target_decoys.sample(frac = 1)
         
         if tide_used:
             narrow_target_decoys = narrow_target_decoys.sort_values(by=['file', 'scan', 'xcorr_score'], ascending=False)
@@ -1590,11 +1637,21 @@ def main():
         target_decoys_all_open = target_decoys_all[target_decoys_all['database'] == "open"]
         target_decoys_all_narrow.to_csv(output_dir + "/" + "filtered_" + search_file_narrow, header=True, index = False, sep = '\t')
         target_decoys_all_open.to_csv(output_dir + "/" + "filtered_" + search_file_open, header=True, index = False, sep = '\t')
+    
+    any_mods = any('[' in pep for pep in target_decoys_all['sequence'])
+    
+    if account_mods or (not any_mods):
+        peptide_list = ''
+    else:
+        logging.info("Reading peptide list.")
+        sys.stderr.write("Reading peptide list. \n")
+        if td_list == '':
+            logging.info("Peptide list not found.")
+            sys.exit("Peptide list not found. \n")
+        else:
+            peptide_list = pd.read_table(td_list)
         
-    logging.info("Reading peptide list.")
-    sys.stderr.write("Reading peptide list. \n")
-    peptide_list = pd.read_table(td_list)
-    df = create_groups(target_decoys_all, narrow_target_decoys, peptide_list, K, tops_gw, score, random_h2h, account_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
+    df = create_groups(target_decoys_all, narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
     results = group_walk(list(df['winning_scores']), list(df['labels']), list(df['all_group_ids']), K, return_frontier, correction)
     df['q_vals'] = results[0]
     
