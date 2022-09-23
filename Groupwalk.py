@@ -1572,14 +1572,31 @@ def main():
     logging.info("Reading in search files.")
     
     #read in files and standardize column names
+    #Comet has an initial comment starting with 'C' -- all others do not
+    with open(search_file_narrow) as f:
+        first_line_narrow = f.readline()
+    with open(search_file_open) as f:
+        first_line_open = f.readline()
     
-    narrow_target_decoys = pd.read_table(search_file_narrow)
-    open_target_decoys = pd.read_table(search_file_open)
+    if 'Comet' in first_line_narrow:
+        narrow_target_decoys = pd.read_table(search_file_narrow, skiprows = 1)
+    else:
+        narrow_target_decoys = pd.read_table(search_file_narrow)
+    
+    if 'Comet' in first_line_open:
+        open_target_decoys = pd.read_table(search_file_open, skiprows = 1)
+    else:
+        open_target_decoys = pd.read_table(search_file_open)
+    
     narrow_target_decoys.columns = narrow_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
     open_target_decoys.columns = open_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
     
     sys.stderr.write("Successfully read in search files. \n")
     logging.info("Successfully read in search files.")
+    
+    if ('xcorr' in narrow_target_decoys.columns):
+        narrow_target_decoys.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
+        open_target_decoys.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
     
     #check if score matches with search file type given by the user
     #and establishes score and search file type
@@ -1602,14 +1619,32 @@ def main():
     else:
         tide_used = 'tide'
         sys.stderr.write("Tide search files detected. \n")
-        logging.info("Tide search files detected.")        
+        logging.info("Tide search files detected.")     
+        
+    
     
     #rename protein id for consistency
     if tide_used == 'ms_fragger':
-        narrow_target_decoys['protein_id'] = narrow_target_decoys['protein']
-        open_target_decoys['protein_id'] = open_target_decoys['protein']
-        narrow_target_decoys.pop('protein')
-        open_target_decoys.pop('protein')
+        narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
+        open_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
+        
+    #making standalone comet agree with crux comet 
+    if tide_used == 'comet':
+        if ('protein' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
+            open_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
+        if ('exp_neutral_mass' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
+            open_target_decoys.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
+        if ('plain_peptide' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
+            open_target_decoys.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
+        if ('modified_peptide' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
+            open_target_decoys.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
+        if ('calc_neutral_mass' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
+            open_target_decoys.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
     
     #check to see if concantenated search file or separate search file used
     check_1 = any(narrow_target_decoys['protein_id'].str.contains(dcy_prefix))
@@ -1631,8 +1666,16 @@ def main():
 
     if concat:
         #take the top 1 PSM for narrow search and top 'tops_open' PSM for open search
-        if tide_used == 'tide' or (tide_used == 'comet' and score == 'xcorr_score'):
+        if tide_used == 'tide':
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
+            open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
+        elif (tide_used == 'comet' and score == 'xcorr_score'):
+            #native comet does not have xcorr_rank, so do this regardless
+            narrow_target_decoys = narrow_target_decoys.sample(frac = 1).reset_index(drop=True)
+            narrow_target_decoys['xcorr_rank'] = narrow_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
+            narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
+            open_target_decoys = open_target_decoys.sample(frac = 1).reset_index(drop=True)
+            open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["e-value"].rank("first", ascending=False)
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
         elif tide_used == 'comet' and score == 'e-value':
             narrow_target_decoys = narrow_target_decoys.sample(frac = 1).reset_index(drop=True)
@@ -1665,8 +1708,24 @@ def main():
             sys.exit("One of the decoy files does not exist. \n")
         
         #search for corresponding decoy search files
-        narrow_2 = pd.read_table(search_file_narrow.replace("target", "decoy"))
-        open_2 = pd.read_table(search_file_open.replace("target", "decoy"))
+        search_file_narrow_2 = search_file_narrow.replace("target", "decoy") 
+        search_file_open_2 = search_file_open.replace("target", "decoy") 
+        
+        with open(search_file_narrow_2) as f:
+            first_line_narrow = f.readline()
+        with open(search_file_open_2) as f:
+            first_line_open = f.readline()
+        
+        if 'Comet' in first_line_narrow:
+            narrow_2 = pd.read_table(search_file_narrow_2, skiprows = 1)
+        else:
+            narrow_2 = pd.read_table(search_file_narrow_2)
+        
+        if 'Comet' in first_line_open:
+            open_2 = pd.read_table(search_file_open_2, skiprows = 1)
+        else:
+            open_2 = pd.read_table(search_file_open_2)
+            
         #standardizing column names
         narrow_2.columns = narrow_2.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
         open_2.columns = open_2.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
@@ -1676,10 +1735,29 @@ def main():
         
         #rename protein id for consistency
         if tide_used == 'ms_fragger':
-            narrow_2['protein_id'] = narrow_2['protein']
-            open_2['protein_id'] = open_2['protein']
-            narrow_2.pop('protein')
-            open_2.pop('protein')
+            narrow_2.rename(columns = {'protein':'protein_id'}, inplace = True)
+            open_2.rename(columns = {'protein':'protein_id'}, inplace = True)
+
+        #making standalone comet agree with crux comet 
+        if tide_used == 'comet':
+            if ('xcorr' in narrow_2.columns):
+                narrow_2.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
+                open_2.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
+            if ('protein' in narrow_2.columns):
+                narrow_2.rename(columns = {'protein':'protein_id'}, inplace = True)
+                open_2.rename(columns = {'protein':'protein_id'}, inplace = True)
+            if ('exp_neutral_mass' in narrow_2.columns):
+                narrow_2.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
+                open_2.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
+            if ('plain_peptide' in narrow_2.columns):
+                narrow_2.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
+                open_2.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
+            if ('modified_peptide' in narrow_2.columns):
+                narrow_2.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
+                open_2.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
+            if ('calc_neutral_mass' in narrow_2.columns):
+                narrow_2.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
+                open_2.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
             
         check_1 = any(narrow_2['protein_id'].str.contains(dcy_prefix))
         check_2 = any(open_2['protein_id'].str.contains(dcy_prefix))
@@ -2021,8 +2099,13 @@ def main():
         
     
     if tide_used == 'comet' and score == 'e-value':
-        df['winning_scores'] = -df['winning_scores'] 
+        df['winning_scores'] = -df['winning_scores']
         
+    #changing the name of some of the features for user-readability
+    #doing this here since I still want to use more detailed names for creating discrepancies when reviewing code e.g winning_scores vs. score or winning_peptides vs. peptide
+    df.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'all_group_ids':'group assignment', 'q_vals':'q_value', 'labels':'target_decoy'}, inplace = True)
+    df['target_decoy'].replace({1:'target', -1:'decoy'}, inplace = True)
+    
     #output the q-values for the remaining winning PSMs
     if output_dir != './':
         if os.path.isdir(output_dir):
