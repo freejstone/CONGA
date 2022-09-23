@@ -1598,6 +1598,8 @@ def main():
         narrow_target_decoys.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
         open_target_decoys.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
     
+    
+    
     #check if score matches with search file type given by the user
     #and establishes score and search file type
     check_1 = (score in narrow_target_decoys.columns)
@@ -1627,6 +1629,10 @@ def main():
     if tide_used == 'ms_fragger':
         narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
         open_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
+        if ('alternative_proteins' in narrow_target_decoys.columns):
+            narrow_target_decoys.pop('alternative_proteins')
+        if ('alternative_proteins' in open_target_decoys.columns):
+            open_target_decoys.pop('alternative_proteins')
         
     #making standalone comet agree with crux comet 
     if tide_used == 'comet':
@@ -1737,6 +1743,10 @@ def main():
         if tide_used == 'ms_fragger':
             narrow_2.rename(columns = {'protein':'protein_id'}, inplace = True)
             open_2.rename(columns = {'protein':'protein_id'}, inplace = True)
+            if ('alternative_proteins' in narrow_2.columns):
+                narrow_2.pop('alternative_proteins')
+            if ('alternative_proteins' in open_2.columns):
+                open_2.pop('alternative_proteins')
 
         #making standalone comet agree with crux comet 
         if tide_used == 'comet':
