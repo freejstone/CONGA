@@ -2103,7 +2103,7 @@ def main():
         
     #changing the name of some of the features for user-readability
     #doing this here since I still want to use more detailed names for creating discrepancies when reviewing code e.g winning_scores vs. score or winning_peptides vs. peptide
-    df.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'all_group_ids':'group assignment', 'q_vals':'q_value', 'labels':'target_decoy'}, inplace = True)
+    df.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'all_group_ids':'group_assignment', 'q_vals':'q_value', 'labels':'target_decoy'}, inplace = True)
     df['target_decoy'].replace({1:'target', -1:'decoy'}, inplace = True)
     
     #output the q-values for the remaining winning PSMs
