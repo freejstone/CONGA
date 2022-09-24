@@ -79,7 +79,7 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                           variable modification, or not.
                           Default = T.
                           
-    --return_extra_mods <T|F>         (Not added yet) If --account_mods T and
+    --return_extra_mods <T|F>       If --account_mods T and
                                     --return_extra_mods T, all target
                                     peptides equal to a peptide up to
                                     variable modification used in the
@@ -1942,15 +1942,23 @@ def main():
     df = df.drop('bins', axis = 1)
     
     
-    if return_extra_mods:
+    if return_extra_mods and (not any_mods):
+        logging.info("--return_extra_mods was set to T however no variable modifications were found.")
+        sys.stderr.write("--return_extra_mods was set to T however no variable modifications were found. \n")
+    elif return_extra_mods and any_mods:
         logging.info("Also reporting sequences with other variable modifications (--return_extra_mods T).")
         sys.stderr.write("Also reporting sequences with other variable modifications (--return_extra_mods T). \n")
         
         #gets the STEM sequence
         df['sequence_without_mods_td'] = df['winning_peptides'].str.replace("\\[|\\]|\\.|\d+", "") + "_" + df['labels'].astype(str)
         
-        target_decoys_all['labels'] = (~(target_decoys_all['protein_id'].str.contains(dcy_prefix))).astype(int)
-        target_decoys_all.loc[target_decoys_all['labels'] == 0, 'labels'] = -1
+        if type(peptide_list) == str:
+            target_decoys_all['labels'] = (~(target_decoys_all['protein_id'].str.contains(dcy_prefix))).astype(int)
+            target_decoys_all.loc[target_decoys_all['labels'] == 0, 'labels'] = -1
+        else:
+            target_decoys_all['labels'] = target_decoys_all['sequence'].isin(peptide_list['target'])
+            target_decoys_all['labels'].replace({True:1, False:-1}, inplace = True)
+            
         
         target_decoys_all['sequence_without_mods_td'] = target_decoys_all['sequence'].str.replace("\\[|\\]|\\.|\d+", "") + "_" + target_decoys_all['labels'].astype(str)
         
@@ -1981,51 +1989,57 @@ def main():
         
         q_vals_and_groups = target_decoys_all_sub[['sequence_without_mods_td', score]].apply(get_qval_group, axis = 1)
         
-        target_decoys_all_sub[['q_vals', 'all_group_ids']] = pd.DataFrame(q_vals_and_groups.tolist(), index= target_decoys_all_sub.index)
-        
-        df = df.drop('sequence_without_mods_td', axis = 1)
-        
-        if tide_used == 'tide':
-            winning_scores = target_decoys_all_sub[score]
-            labels = target_decoys_all_sub['labels']
-            winning_peptides = target_decoys_all_sub['sequence']
-            rank = target_decoys_all_sub['xcorr_rank']
-            delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
-            database = target_decoys_all_sub['database']
-            scan = target_decoys_all_sub['scan']
-            q_vals = target_decoys_all_sub['q_vals']
-            file = target_decoys_all_sub['file']
-            all_group_ids = target_decoys_all_sub['all_group_ids']
-            df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, file, all_group_ids, q_vals), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'file', 'all_group_ids', 'q_vals'])
+        if len(q_vals_and_groups) > 0:
+            target_decoys_all_sub[['q_vals', 'all_group_ids']] = pd.DataFrame(q_vals_and_groups.values.tolist(), index= target_decoys_all_sub.index)
             
-        elif tide_used == 'comet':
-            winning_scores = target_decoys_all_sub[score]
-            labels = target_decoys_all_sub['labels']
-            winning_peptides = target_decoys_all_sub['sequence']
-            if score == 'e-value':
-                rank = target_decoys_all_sub['e_rank']
-            if score == 'xcorr_score':
+            df = df.drop('sequence_without_mods_td', axis = 1)
+            
+            if tide_used == 'tide':
+                winning_scores = target_decoys_all_sub[score]
+                labels = target_decoys_all_sub['labels']
+                winning_peptides = target_decoys_all_sub['sequence']
                 rank = target_decoys_all_sub['xcorr_rank']
-            delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
-            database = target_decoys_all_sub['database']
-            scan = target_decoys_all_sub['scan'].astype(str) + ' ' + target_decoys_all_sub['charge'].astype(str) + ' ' + target_decoys_all_sub['spectrum_neutral_mass'].astype(str)
-            q_vals = target_decoys_all_sub['q_vals']
-            all_group_ids = target_decoys_all_sub['all_group_ids']
-            df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, all_group_ids, q_vals), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan_charge_sp_neutral_mass', 'all_group_ids', 'q_vals'])
-        
-        elif tide_used == 'ms_fragger':
-            winning_scores = target_decoys_all_sub['hyperscore']
-            labels = target_decoys_all_sub['labels']
-            winning_peptides = target_decoys_all_sub['sequence']
-            rank = target_decoys_all_sub['hit_rank']
-            delta_mass = target_decoys_all_sub['precursor_neutral_mass'] - target_decoys_all_sub['calc_neutral_pep_mass']
-            database = target_decoys_all_sub['database']
-            scan = target_decoys_all_sub['scannum']
-            q_vals = target_decoys_all_sub['q_vals']
-            all_group_ids = target_decoys_all_sub['all_group_ids']
-            df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, all_group_ids, q_vals), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'all_group_ids', 'q_vals'])
-        
-        df = pd.concat([df, df_extra])
+                delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
+                database = target_decoys_all_sub['database']
+                scan = target_decoys_all_sub['scan']
+                q_vals = target_decoys_all_sub['q_vals']
+                file = target_decoys_all_sub['file']
+                all_group_ids = target_decoys_all_sub['all_group_ids']
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, file, all_group_ids, q_vals), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'file', 'all_group_ids', 'q_vals'])
+                
+            elif tide_used == 'comet':
+                winning_scores = target_decoys_all_sub[score]
+                labels = target_decoys_all_sub['labels']
+                winning_peptides = target_decoys_all_sub['sequence']
+                if score == 'e-value':
+                    rank = target_decoys_all_sub['e_rank']
+                if score == 'xcorr_score':
+                    rank = target_decoys_all_sub['xcorr_rank']
+                delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
+                database = target_decoys_all_sub['database']
+                scan = target_decoys_all_sub['scan'].astype(str) + ' ' + target_decoys_all_sub['charge'].astype(str) + ' ' + target_decoys_all_sub['spectrum_neutral_mass'].astype(str)
+                q_vals = target_decoys_all_sub['q_vals']
+                all_group_ids = target_decoys_all_sub['all_group_ids']
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, all_group_ids, q_vals), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan_charge_sp_neutral_mass', 'all_group_ids', 'q_vals'])
+            
+            elif tide_used == 'ms_fragger':
+                winning_scores = target_decoys_all_sub['hyperscore']
+                labels = target_decoys_all_sub['labels']
+                winning_peptides = target_decoys_all_sub['sequence']
+                rank = target_decoys_all_sub['hit_rank']
+                delta_mass = target_decoys_all_sub['precursor_neutral_mass'] - target_decoys_all_sub['calc_neutral_pep_mass']
+                database = target_decoys_all_sub['database']
+                scan = target_decoys_all_sub['scannum']
+                q_vals = target_decoys_all_sub['q_vals']
+                all_group_ids = target_decoys_all_sub['all_group_ids']
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, all_group_ids, q_vals), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'all_group_ids', 'q_vals'])
+            
+            df['originally_discovered'] = True
+            df_extra['originally_discovered'] = False
+            df = pd.concat([df, df_extra])
+        else:
+            logging.info("Sequences with other variable modifications did not have high enough scores to be reported.")
+            sys.stderr.write("Sequences with other variable modifications did not have high enough scores to be reported. \n")
     
     #report power for 1 and 5% FDR
     df = df.sort_values(by = ['q_vals', 'winning_scores'], ascending = [True, False])
