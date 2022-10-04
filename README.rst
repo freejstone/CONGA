@@ -10,10 +10,14 @@ Open Group-walk is a tool for discovering peptides in mass-spectrometry data wit
 Documentation
 =============
 
-A link to the documentation on read-the-docs will go here. For now, I will house it all locally. Documentation will include a basic example, explanation of input parameters, and an explanation of columns in the output file.
+A link to the documentation on read-the-docs will go here. For now, I will house it all locally using .rst files, which then can be easily transported over. Documentation will include a basic example, explanation of input parameters, and an explanation of columns in the output file. Not sure if we should also have a module-index since there is really only one module (users aren't able to use the individual functions used by main).
 
 Paper
 =====
 
 A link to the biorXiv paper will go here.
 
+Installation
+============
+
+To install simply go to Code, Download Zip and extract the Zip file. Installation of the relevant package dependencies are required (see Groupwalk.py). Please see the documentation, specifically the tutorial, on how to run Open Group-walk.
