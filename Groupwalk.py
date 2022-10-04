@@ -553,6 +553,8 @@ def filter_scan(search_df, thresh = 0.25, frag_bin_size = 0.05, static_mods = {'
     peptide_1 = [search_df['sequence'].loc[0]]
     charge_1 = [search_df['charge'].loc[0]]
     drop_scan = [False]*n_scans
+    
+    #if any(search_df['sequence'][1:].str.contains(peptide_1[0])):
     for top in range(1, n_scans):
         peptide_2 = [search_df['sequence'].loc[top]]
         charge_2 = [search_df['charge'].loc[top]]
@@ -562,8 +564,70 @@ def filter_scan(search_df, thresh = 0.25, frag_bin_size = 0.05, static_mods = {'
         else:
             peptide_1 += peptide_2
             charge_1 += charge_2
-   
+    
     return drop_scan
+
+###############################################################################
+def wrapper(df, q, thresh, frag_bin_size, static_mods): #wrapper is used to update the manager queue every time the wrapper is called
+    '''
+    a wrapper for filter_scan that can be used for multiprocessing
+    '''
+    result = filter_scan(df, thresh, frag_bin_size, static_mods)
+    q.put(1)
+    return(result)
+###############################################################################
+def filter_scan_subset(df, q, task_number, return_dict, tide_used, score, thresh, static_mods):
+    '''
+    Effectively calls a wrapper for filter_scan that can be used for multiprocessing
+    '''
+    if tide_used == 'tide':
+        sys.stderr.write("Starting Process " + str(task_number) + " \n")
+        logging.info("Starting Process " + str(task_number))
+        results = df.groupby(['file', 'scan']).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+        results = results.sort_index(ascending = False)
+        results = results.apply(pd.Series).stack().reset_index()
+        return_dict[task_number] = results[0]
+    elif tide_used == 'comet':
+        if score == 'e-value':
+            sys.stderr.write("Starting Process " + str(task_number) + " \n")
+            logging.info("Starting Process " + str(task_number))
+            results = df.groupby(['scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+            results = results.sort_index(ascending = True) #Note that ascending is true here
+            results = results.apply(pd.Series).stack().reset_index()
+            return_dict[task_number] = results[0]
+        else:
+            sys.stderr.write("Starting Process " + str(task_number) + " \n")
+            logging.info("Starting Process " + str(task_number))
+            results = df.groupby(['scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+            results = results.sort_index(ascending = False) #Note that ascending is false here for xcorr
+            results = results.apply(pd.Series).stack().reset_index()
+            return_dict[task_number] = results[0]
+    else:
+        sys.stderr.write("Starting Process " + str(task_number) + " \n")
+        logging.info("Starting Process " + str(task_number))
+        results = df.groupby('scannum').apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+        results = results.sort_index(ascending = False)
+        results = results.apply(pd.Series).stack().reset_index()
+        return_dict[task_number] = results[0]
+    
+###############################################################################
+def listener(q, list_of_df, tide_used):
+    '''
+    constantly checks to see if the queue q has been updated
+    '''
+    if tide_used == 'tide':
+        pbar = tqdm(total = sum([len(j.groupby(['scan', "charge", "spectrum_neutral_mass"])) for j in list_of_df]))
+        for item in iter(q.get, None):
+            pbar.update(item)
+    elif tide_used == 'comet':
+        pbar = tqdm(total = sum([len(j.groupby(['scan', "charge", "spectrum_neutral_mass"])) for j in list_of_df]))
+        for item in iter(q.get, None):
+            pbar.update(item)
+    else:
+        pbar = tqdm(total = sum([len(j.groupby('scannum')) for j in list_of_df]))
+        for item in iter(q.get, None):
+            pbar.update(item)
+    
 
 ###############################################################################
 def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh = 0.25, n_processes = 1, neighbour_remove = True, tide_used = 'tide', static_mods = {'C':57.02146}):
@@ -652,68 +716,13 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
         for i in range(len(target_decoys_all['split_col'].unique())):
             list_of_df[i] = target_decoys_grouped.get_group(target_decoys_all['split_col'].unique()[i])
             list_of_df[i].reset_index(drop = True, inplace = True)
-        
-        def wrapper(df, q, thresh, frag_bin_size, static_mods): #wrapper is used to update the manager queue every time the wrapper is called
-            result = filter_scan(df, thresh, frag_bin_size, static_mods)
-            q.put(1)
-            return(result)
-        
-        if tide_used == 'tide':
-            def filter_scan_subset(df, q, task_number, return_dict): #function used to apply wrapper to a partitioned dataframe
-                sys.stderr.write("Starting Process " + str(task_number) + " \n")
-                logging.info("Starting Process " + str(task_number))
-                results = df.groupby(['file', 'scan']).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
-                results = results.sort_index(ascending = False)
-                results = results.apply(pd.Series).stack().reset_index()
-                return_dict[task_number] = results[0]
-                
-            def listener(q): #listener is used to constantly checking manager queue and update the progress bar whenever the manager queue updates
-                pbar = tqdm(total = sum([len(j.groupby(['file', 'scan'])) for j in list_of_df]))
-                for item in iter(q.get, None):
-                    pbar.update(item)
-                    
-        elif tide_used == 'comet':
-            if score == 'e-value':
-                def filter_scan_subset(df, q, task_number, return_dict):
-                    sys.stderr.write("Starting Process " + str(task_number) + " \n")
-                    logging.info("Starting Process " + str(task_number))
-                    results = df.groupby(['scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
-                    results = results.sort_index(ascending = True) #Note that ascending is true here
-                    results = results.apply(pd.Series).stack().reset_index()
-                    return_dict[task_number] = results[0]
-            else:
-                def filter_scan_subset(df, q, task_number, return_dict):
-                    sys.stderr.write("Starting Process " + str(task_number) + " \n")
-                    logging.info("Starting Process " + str(task_number))
-                    results = df.groupby(['scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
-                    results = results.sort_index(ascending = False) #Note that ascending is false here for xcorr
-                    results = results.apply(pd.Series).stack().reset_index()
-                    return_dict[task_number] = results[0]
-                
-            def listener(q):
-                pbar = tqdm(total = sum([len(j.groupby(['scan', "charge", "spectrum_neutral_mass"])) for j in list_of_df]))
-                for item in iter(q.get, None):
-                    pbar.update(item)
-        else:
-            def filter_scan_subset(df, q, task_number, return_dict):
-                sys.stderr.write("Starting Process " + str(task_number) + " \n")
-                logging.info("Starting Process " + str(task_number))
-                results = df.groupby('scannum').apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
-                results = results.sort_index(ascending = False)
-                results = results.apply(pd.Series).stack().reset_index()
-                return_dict[task_number] = results[0]
-        
-            def listener(q):
-                pbar = tqdm(total = sum([len(j.groupby('scannum')) for j in list_of_df]))
-                for item in iter(q.get, None):
-                    pbar.update(item)
             
         manager = multiprocessing.Manager()
         q = manager.Queue() #creating instance of manager queue
         return_dict = manager.dict() #creating manager dict variable that can be used to store changes to the argument by ALL processes at the same time
-        proc = multiprocessing.Process(target=listener, args=(q,)) 
+        proc = multiprocessing.Process(target=listener, args=(q, list_of_df, tide_used)) 
         proc.start() #start listening for updates to manager queue
-        workers = [multiprocessing.Process(target = filter_scan_subset, args=(list_of_df[i], q, i, return_dict)) for i in range(n_processes)] #now run each of the processes
+        workers = [multiprocessing.Process(target = filter_scan_subset, args=(list_of_df[i], q, i, return_dict, tide_used, score, thresh, static_mods)) for i in range(n_processes)] #now run each of the processes
         for worker in workers:
             worker.start()
         for worker in workers:
@@ -877,7 +886,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
             #peptide_list is required here to pair target-decoys
             peptide_list_sub = peptide_list[peptide_list['decoy'].isin(decoys['sequence'])].copy()
             peptide_list_sub.decoy = peptide_list_sub.decoy.astype('category')
-            peptide_list_sub.decoy.cat.set_categories(decoys['sequence'], inplace = True)
+            peptide_list_sub.decoy = peptide_list_sub.decoy.cat.set_categories(decoys['sequence'])
             peptide_list_sub = peptide_list_sub.sort_values(['decoy'])
             peptide_list_sub.reset_index(drop = True, inplace = True)
             #find the associated pair for the decoy sequences
@@ -907,7 +916,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         target_decoys_narrow_sub = narrow_target_decoys[narrow_target_decoys['scan_plus_seq'].isin(unique_scan_plus_seq_sub)].copy()
         target_decoys_narrow_sub.reset_index(drop = True, inplace = True)
         target_decoys_narrow_sub.scan_plus_seq = target_decoys_narrow_sub.scan_plus_seq.astype("category")
-        target_decoys_narrow_sub.scan_plus_seq.cat.set_categories(scan_plus_seq_sub, inplace = True)
+        target_decoys_narrow_sub.scan_plus_seq = target_decoys_narrow_sub.scan_plus_seq.cat.set_categories(scan_plus_seq_sub)
         target_decoys_narrow_sub.reset_index(drop = True, inplace = True)
         
         #score = tailor_score or xcorr_score
@@ -957,7 +966,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         target_decoys_narrow_sub = narrow_target_decoys[narrow_target_decoys['scan_plus_seq'].isin(unique_scan_plus_seq_sub)].copy()
         target_decoys_narrow_sub.reset_index(drop = True, inplace = True)
         target_decoys_narrow_sub.scan_plus_seq = target_decoys_narrow_sub.scan_plus_seq.astype("category")
-        target_decoys_narrow_sub.scan_plus_seq.cat.set_categories(scan_plus_seq_sub, inplace = True)
+        target_decoys_narrow_sub.scan_plus_seq = target_decoys_narrow_sub.scan_plus_seq.cat.set_categories(scan_plus_seq_sub)
         target_decoys_narrow_sub.reset_index(drop = True, inplace = True)
            
         target_decoys_final.loc[target_decoys_final['scan_plus_seq'].isin(unique_scan_seq_td_narrow), score] = list(target_decoys_narrow_sub.sort_values(['scan_plus_seq'])[score])
@@ -1006,7 +1015,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         targets['original_target_sequence'] = targets[pep]
         peptide_list_sub = peptide_list[peptide_list['decoy'].isin(decoys[pep])].copy()
         peptide_list_sub.decoy = peptide_list_sub.decoy.astype('category')
-        peptide_list_sub.decoy.cat.set_categories(decoys[pep], inplace = True)
+        peptide_list_sub.decoy = peptide_list_sub.decoy.cat.set_categories(decoys[pep])
         peptide_list_sub = peptide_list_sub.sort_values(['decoy'])
         peptide_list_sub.reset_index(drop = True, inplace = True)
         #find the associated pair for the decoy sequences
@@ -1036,7 +1045,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         target_decoys_narrow_sub = narrow_target_decoys[narrow_target_decoys['scan_plus_seq'].isin(unique_scan_plus_seq_sub)].copy()
         target_decoys_narrow_sub.reset_index(drop = True, inplace = True)
         target_decoys_narrow_sub.scan_plus_seq = target_decoys_narrow_sub.scan_plus_seq.astype("category")
-        target_decoys_narrow_sub.scan_plus_seq.cat.set_categories(scan_plus_seq_sub, inplace = True)
+        target_decoys_narrow_sub.scan_plus_seq = target_decoys_narrow_sub.scan_plus_seq.cat.set_categories(scan_plus_seq_sub)
         target_decoys_narrow_sub.reset_index(drop = True, inplace = True)
             
         target_decoys_final.loc[target_decoys_final['scan_plus_seq'].isin(unique_scan_seq_td_narrow), 'hyperscore'] = list(target_decoys_narrow_sub.sort_values(['scan_plus_seq'])['hyperscore'])
@@ -1696,8 +1705,8 @@ def main():
         
         if tide_used == 'tide':
             #This is redundant currently, as original_target_sequence is being printed WITHOUT modification (but this is a current bug in tide-search, so we run this anyways)
-            narrow_target_decoys['original_target_sequence'] = narrow_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "")
-            open_target_decoys['original_target_sequence'] = open_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "")
+            narrow_target_decoys['original_target_sequence'] = narrow_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
+            open_target_decoys['original_target_sequence'] = open_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
             
         narrow_target_decoys.reset_index(drop = True, inplace = True)
         open_target_decoys.reset_index(drop = True, inplace = True)
@@ -1897,6 +1906,10 @@ def main():
 
     target_decoys_all = filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh, n_processes, neighbour_remove, tide_used, static_mods)
     
+    target_decoys_all['new_rank'] = target_decoys_all.groupby(["file", "scan"])["xcorr_score"].rank("first", ascending=False)
+    
+    #target_decoys_all = target_decoys_all[~((target_decoys_all['new_rank'].isin(range(2, 7))) & (target_decoys_all['database'] == 'narrow'))]
+    
     if tide_used == 'comet':
         target_decoys_all['check_protein'] = target_decoys_all['protein_id'].apply(lambda x: del_protein(x, dcy_prefix))
         target_decoys_all = target_decoys_all[target_decoys_all['check_protein'] == False]
@@ -1992,7 +2005,7 @@ def main():
         if len(q_vals_and_groups) > 0:
             target_decoys_all_sub[['q_vals', 'all_group_ids']] = pd.DataFrame(q_vals_and_groups.values.tolist(), index= target_decoys_all_sub.index)
             
-            df = df.drop('sequence_without_mods_td', axis = 1)
+            #df = df.drop('sequence_without_mods_td', axis = 1)
             
             if tide_used == 'tide':
                 winning_scores = target_decoys_all_sub[score]
@@ -2127,8 +2140,19 @@ def main():
         
     #changing the name of some of the features for user-readability
     #doing this here since I still want to use more detailed names for creating discrepancies when reviewing code e.g winning_scores vs. score or winning_peptides vs. peptide
-    df.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'all_group_ids':'group_assignment', 'q_vals':'q_value', 'labels':'target_decoy'}, inplace = True)
-    df['target_decoy'].replace({1:'target', -1:'decoy'}, inplace = True)
+    #df = df[df['labels'] == 1]
+    #df.pop('labels')
+    df.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'all_group_ids':'group_assignment', 'q_vals':'q_value', 'database':'search_file'}, inplace = True)
+    
+    #ordering by peptides
+    if return_extra_mods and any_mods:
+        df['sequence_without_mods'] = df['peptide'].str.replace("\\[|\\]|\\.|\d+", "")
+        df['min_q_vals'] = df.groupby(['sequence_without_mods']).q_value.transform('min')
+        df = df.sort_values(by = ['min_q_vals', 'originally_discovered'], ascending = [True, False])
+        df.pop('sequence_without_mods')
+    
+    #rounding the mass differences
+    df = df.round({'delta_mass':4})
     
     #output the q-values for the remaining winning PSMs
     if output_dir != './':
@@ -2137,6 +2161,9 @@ def main():
         else:
             os.mkdir(output_dir)
             df.to_csv(output_dir + "/" + file_root, header=True, index = False, sep = '\t')
+    else:
+        df.to_csv(output_dir + "/" + file_root, header=True, index = False, sep = '\t')
+        
     if return_frontier:
         results[1].to_csv(output_dir + "/" + frontier_name, header=True, index = False, sep = '\t')
     
