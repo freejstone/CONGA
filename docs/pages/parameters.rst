@@ -43,7 +43,7 @@ Group-walk algorithm
 CPU processes
 -------------
 
-* ``--n_processes <integer>``: The number of threads, used in the filtering process. Default = 1.
+* ``--n_processes <integer>``: The number of processes used in the filtering process. Default = 1.
 
 ----------------
 Input and output
