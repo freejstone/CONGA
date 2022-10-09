@@ -36,8 +36,8 @@ Group-walk algorithm
 --------------------
 
 * ``--K <integer>``: The number of recently observed peptides used to estimate the probability that the next peptide is a target or decoy. Default = 40.
-* ``--return_extra_mods <T|F>``: If ``--account_mods T``, all target peptides equal to a peptide up to variable modification used in the group-walk algorithm will also be reported with the same q-value. Default = F.
 * ``--return_frontier <T|F>``: The sequence of indices describing the positions of the frontier used by Groupwalk is returned as a .txt file to the output directory. Default = F.
+* ``--FDR_threshold <value>``: The FDR threshold. Default = 0.01.
 
 -------------
 CPU processes
@@ -50,10 +50,12 @@ Input and output
 ----------------
 
 * ``--output_dir <string>``: The file-path of the output. Default = './'.
-* ``--file_root <string>``: The file name of the output. Default = group_walk_results.txt.
+* ``--file_root <string>``: The file name of the output. Default = 'open_group_walk'.
 * ``--print_chimera <T|F>``: To determine whether we print the number of scans that have more than 1 peptide discovered at the 1% and 5% FDR level to the log file. Default = T.
 * ``--print_group_pi0 <T|F>``: To determine whether the group-level proportion of pi_0 is printed to the log file. Default = T.
+* ``--return_extra_mods <T|F>``: All top 1 PSM-ranked target peptides that are equal to a discovered peptide up to variable modification will be included in the file output. Default = F.
 * ``--return_decoys <T|F>``: Also report decoys. Default = F.
 * ``--static_mods <string>``: Of the form X:[+-]A where X is the amino acid, or rather "cterm" or "nterm" if it is a modification on the C-terminal or N-terminal. A is the absolute mass shift in Daltons. [+-] indicates whether the mass shift is positive or negative. C+57.02146 is always included by default. Variable modifications do not need specification (they are accounted for via the search files). List mods in comma separated format, e.g. nterm:10,cterm:-20,L:50. Default = None.
+* ``--return_mass_mod_hist <T|F>``: To determine whether a histogram of unaccounted-for mass-modifications is written to the directory. Default = T.
 * ``--dcy_prefix <string>``: The prefix used for the decoy proteins. Default = 'decoy\_'.
 * ``--seed <int>``: Set random seed. Default = None.

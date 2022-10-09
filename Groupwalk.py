@@ -21,6 +21,7 @@ import datetime
 from tqdm import tqdm
 import re
 import platform
+from matplotlib import pyplot as plt
 
 
 USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
@@ -46,8 +47,12 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
     --output_dir <string> The file-path of the output
                           Default = './'.
                           
-    --file_root <string>  The file name of the output
-                          Default = group_walk_results.txt.
+    --file_root <string>  The file prefix of the output files
+                          Default = 'open_group_walk'.
+
+    --FDR_threshold <value>     A user-specified threshold for which the reported
+                                peptides will have FDR below this threshold.
+                                Default = 0.01.
 
     --K <integer>         The number of recently observed peptides used
                           to estimate the probability that the next
@@ -79,12 +84,10 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                           variable modification, or not.
                           Default = T.
                           
-    --return_extra_mods <T|F>       If --account_mods T and
-                                    --return_extra_mods T, all target
-                                    peptides equal to a peptide up to
-                                    variable modification used in the
-                                    group-walk algorithm will also
-                                    be reported with the same q-value.
+    --return_extra_mods <T|F>       All top 1 PSM-ranked target peptides that
+                                    are equal to a discovered peptide
+                                    up to variable modification will
+                                    be included in the file output.
                                     Default = F.
                           
     --precursor_bin_width <value>   To determine the size of the bins
@@ -149,9 +152,6 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                                 is returned as a .txt file to the output
                                 directory.
                                 Default = F.
-                                    
-    --frontier_name <string>    The file-name of the output frontier.
-                                Default = frontier_results.txt.
     
     --n_processes <integer>     The number of threads, used in the filtering
                                 process.
@@ -170,8 +170,15 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                                 nterm:10,cterm:-20,L:50.
                                 Default = None.
                                 
+    --return_mass_mod_hist <T|F>   A matplotlib histogram of mass 
+                                   modifications is returned to the user's
+                                   directory.
+                                   Default = F.
+                                
     --dcy_prefix <string>       The prefix used for the decoy proteins.
                                 Default = 'decoy_'
+
+    --return_decoys <T|F>       Also report decoys. Default = F. 
                                 
     --seed <int>          Set random seed.
                           Default = None.
@@ -1073,7 +1080,8 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     df = df.sample(frac = 1)
     
     #creating bins for the mass differences
-    breaks_p = np.arange(0, 100 + 2*precursor_bin_width, precursor_bin_width) - precursor_bin_width/2
+    delta_mass_max = max(abs(df['delta_mass']))
+    breaks_p = np.arange(0, delta_mass_max + 2*precursor_bin_width, precursor_bin_width) - precursor_bin_width/2
     breaks_n = list(reversed(-breaks_p))
     breaks = pd.Series(breaks_n[0:(len(breaks_n) - 1)] + list(breaks_p), name = 'bins')
     digitized = np.digitize(df['delta_mass'], breaks)
@@ -1368,6 +1376,7 @@ def main():
     
     # Set default values for parameters.
     K = 40
+    FDR_threshold = 0.01
     tops_gw = 2
     tops_open = 5
     score = 'tailor_score'
@@ -1389,10 +1398,11 @@ def main():
     n_processes = 1
     return_frontier = False
     output_dir = './'
-    file_root = 'group_walk_results.txt'
-    frontier_name = 'frontier_results.txt'
+    file_root = 'open_group_walk'
     static_mods = {'C':57.02146}
+    return_mass_mod_hist = False
     dcy_prefix = 'decoy_'
+    return_decoys = False
     seed = None
     
     command_line = ' '.join(sys.argv)
@@ -1405,6 +1415,9 @@ def main():
         sys.argv = sys.argv[1:]
         if (next_arg == "--K"):
             K = int(sys.argv[0])
+            sys.argv = sys.argv[1:]
+        elif (next_arg == "--FDR_threshold"):
+            FDR_threshold = float(sys.argv[0])
             sys.argv = sys.argv[1:]
         elif (next_arg == "--tops_open"):
             tops_open = int(sys.argv[0])
@@ -1511,14 +1524,29 @@ def main():
         elif (next_arg == "--file_root"):
             file_root = str(sys.argv[0])  
             sys.argv = sys.argv[1:]
-        elif (next_arg == "--frontier_name"):
-            frontier_name = str(sys.argv[0])  
-            sys.argv = sys.argv[1:]
         elif (next_arg == "--static_mods"):
             static_mods = parse_static_mods(sys.argv[0])
             sys.argv = sys.argv[1:]
+        elif (next_arg == "--return_mass_mod_hist"):
+            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
+                return_mass_mod_hist = True
+            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
+                return_mass_mod_hist = False
+            else:
+                sys.stderr.write("Invalid argument for --return_mass_mod_hist")
+                sys.exit(1)
+            sys.argv = sys.argv[1:]
         elif (next_arg == "--dcy_prefix"):
             dcy_prefix = str(sys.argv[0])
+            sys.argv = sys.argv[1:]
+        elif (next_arg == "--return_decoys"):
+            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
+                return_decoys = True
+            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
+                return_decoys = False
+            else:
+                sys.stderr.write("Invalid argument for --return_decoys")
+                sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == '--seed'):
             seed = int(sys.argv[0])
@@ -1542,18 +1570,13 @@ def main():
     if type(seed) == int:
         random.seed(seed)
     
-    if '.txt' not in file_root:
-        file_root += '.txt'
-    if '.txt' not in frontier_name:
-        frontier_name += '.txt'
-    
     #check if output directory exists, if not create and store log file there.
     if output_dir != './':
         if os.path.isdir(output_dir):
-            logging.basicConfig(filename=output_dir + "/" + file_root.replace('.txt', '.log.txt'), level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
         else:
             os.mkdir(output_dir)
-            logging.basicConfig(filename=output_dir + "/" + file_root.replace('.txt', '.log.txt'), level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+            logging.basicConfig(filename=output_dir + "/" + file_root  + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
 
     #print CPU info
     logging.info('CPU: ' + str(platform.platform()))
@@ -1905,11 +1928,7 @@ def main():
             open_target_decoys.loc[open_target_decoys['protein_id'].str.contains(dcy_prefix), 'target_sequence'] = reverse_sequence(open_target_decoys['sequence'][open_target_decoys['protein_id'].str.contains(dcy_prefix)])
 
     target_decoys_all = filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh, n_processes, neighbour_remove, tide_used, static_mods)
-    
-    target_decoys_all['new_rank'] = target_decoys_all.groupby(["file", "scan"])["xcorr_score"].rank("first", ascending=False)
-    
-    #target_decoys_all = target_decoys_all[~((target_decoys_all['new_rank'].isin(range(2, 7))) & (target_decoys_all['database'] == 'narrow'))]
-    
+      
     if tide_used == 'comet':
         target_decoys_all['check_protein'] = target_decoys_all['protein_id'].apply(lambda x: del_protein(x, dcy_prefix))
         target_decoys_all = target_decoys_all[target_decoys_all['check_protein'] == False]
@@ -1949,11 +1968,90 @@ def main():
     #apply group-walk
     results = group_walk(list(df['winning_scores']), list(df['labels']), list(df['all_group_ids']), K, return_frontier, correction)
     
-    
     df['q_vals'] = results[0]
     df = df.sort_values(by = ['q_vals', 'winning_scores'], ascending = [False, True])
     df = df.drop('bins', axis = 1)
     
+    #report power for 1 and 5% FDR (we do this before the reporting of extra variable modifications)
+    df.reset_index(drop = True, inplace = True)
+    
+    power_1 = sum( ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) )
+    power_5 = sum( ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) )
+    
+    logging.info(str(power_1) + " peptides discovered at the 1% FDR level.")
+    logging.info(str(power_5) + " peptides discovered at the 5% FDR level.")
+    sys.stderr.write(str(power_1) + " peptides discovered at the 1% FDR level. \n")
+    sys.stderr.write(str(power_5) + " peptides discovered at the 5% FDR level. \n")
+    
+    #print Scan multiplicity: 
+    if print_chimera:
+        if tide_used == 'tide':
+            if power_1 > 0:
+                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan']]).value_counts().value_counts()
+                scan_mult1 = pd.DataFrame(scan_mult1)
+                scan_mult1.columns = ['Count']
+                scan_mult1.index.names = ['Scan multiplicity:']
+                
+                logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
+                logging.info(scan_mult1.to_string())
+                sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
+                sys.stderr.write(scan_mult1.to_string() + "\n")
+            if power_5 > 0:
+                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan']]).value_counts().value_counts()
+                scan_mult5 = pd.DataFrame(scan_mult5)
+                scan_mult5.columns = ['Count']
+                scan_mult5.index.names = ['Scan multiplicity:']
+                
+                logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
+                logging.info(scan_mult5.to_string())
+                sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
+                sys.stderr.write(scan_mult5.to_string() + "\n")
+        elif tide_used == 'comet':
+            if power_1 > 0:
+                scan_mult1 = df['scan_charge_sp_neutral_mass'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+                scan_mult1 = pd.DataFrame(scan_mult1)
+                scan_mult1.columns = ['Count']
+                scan_mult1.index.names = ['Scan multiplicity:']
+    
+                logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
+                logging.info(scan_mult1.to_string())
+                sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
+                sys.stderr.write(scan_mult1.to_string() + "\n")
+            if power_5 > 0:
+                scan_mult5 = df['scan_charge_sp_neutral_mass'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+                scan_mult5 = pd.DataFrame(scan_mult5)
+                scan_mult5.columns = ['Count']
+                scan_mult5.index.names = ['Scan multiplicity:']
+    
+                
+                logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
+                logging.info(scan_mult5.to_string())
+                sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
+                sys.stderr.write(scan_mult5.to_string() + "\n")
+        else:
+            if power_1 > 0:
+                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+                scan_mult1 = pd.DataFrame(scan_mult1)
+                scan_mult1.columns = ['Count']
+                scan_mult1.index.names = ['Scan multiplicity:']
+                
+                logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
+                logging.info(scan_mult1.to_string())
+                sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
+                sys.stderr.write(scan_mult1.to_string() + "\n")
+            
+            if power_5 > 0:
+                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+                scan_mult5 = pd.DataFrame(scan_mult5)
+                scan_mult5.columns = ['Count']
+                scan_mult5.index.names = ['Scan multiplicity:']
+                
+                logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
+                logging.info(scan_mult5.to_string())
+                sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
+                sys.stderr.write(scan_mult5.to_string() + "\n")
+        
+    df = df[df['q_vals'] <= FDR_threshold]
     
     if return_extra_mods and (not any_mods):
         logging.info("--return_extra_mods was set to T however no variable modifications were found.")
@@ -1962,6 +2060,82 @@ def main():
         logging.info("Also reporting sequences with other variable modifications (--return_extra_mods T).")
         sys.stderr.write("Also reporting sequences with other variable modifications (--return_extra_mods T). \n")
         
+        #gets the STEM sequence
+        df['sequence_without_mods_td'] = df['winning_peptides'].str.replace("\\[|\\]|\\.|\d+", "", regex = True) + "_" + df['labels'].astype(str)
+
+        if type(peptide_list) == str:
+            target_decoys_all['labels'] = (~(target_decoys_all['protein_id'].str.contains(dcy_prefix))).astype(int)
+            target_decoys_all.loc[target_decoys_all['labels'] == 0, 'labels'] = -1
+        else:
+            target_decoys_all['labels'] = target_decoys_all['sequence'].isin(peptide_list['target'])
+            target_decoys_all['labels'].replace({True:1, False:-1}, inplace = True)
+
+        target_decoys_all['sequence_without_mods_td'] = target_decoys_all['sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True) + "_" + target_decoys_all['labels'].astype(str)
+        
+        #get all target PSMs whose sequence equals to one in df up to modification but isn't exactly equal to the same sequence in df.
+        target_decoys_all_sub = target_decoys_all[( target_decoys_all['sequence_without_mods_td'].isin(df['sequence_without_mods_td']) ) & ( target_decoys_all['labels'] == 1 ) & ~( target_decoys_all['sequence'].isin(df['winning_peptides']) )].copy()
+        
+        if score != 'e-value':
+            target_decoys_all_sub = target_decoys_all_sub.sort_values(by=[score], ascending=False)
+        else:
+            target_decoys_all_sub = target_decoys_all_sub.sort_values(by=[score], ascending=True)
+        
+        target_decoys_all_sub = target_decoys_all_sub.drop_duplicates(subset = ['sequence'])
+        
+        if (tide_used == 'tide') or (score == 'xcorr_score'):
+            rank = 'xcorr_rank'
+        elif (tide_used == 'comet') and (score == 'e-value'):
+            rank = 'e_rank'
+        else:
+            rank = 'hit_rank'
+    
+        target_decoys_all_sub = target_decoys_all_sub[target_decoys_all_sub[rank] == 1]
+        
+        if len(target_decoys_all_sub) > 0:
+        
+            if tide_used == 'tide':
+                winning_scores = target_decoys_all_sub[score]
+                labels = target_decoys_all_sub['labels']
+                winning_peptides = target_decoys_all_sub['sequence']
+                rank = target_decoys_all_sub['xcorr_rank']
+                delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
+                database = target_decoys_all_sub['database']
+                scan = target_decoys_all_sub['scan']
+                file = target_decoys_all_sub['file']
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'file'])
+                
+            elif tide_used == 'comet':
+                winning_scores = target_decoys_all_sub[score]
+                labels = target_decoys_all_sub['labels']
+                winning_peptides = target_decoys_all_sub['sequence']
+                if score == 'e-value':
+                    rank = target_decoys_all_sub['e_rank']
+                if score == 'xcorr_score':
+                    rank = target_decoys_all_sub['xcorr_rank']
+                delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
+                database = target_decoys_all_sub['database']
+                scan = target_decoys_all_sub['scan'].astype(str) + ' ' + target_decoys_all_sub['charge'].astype(str) + ' ' + target_decoys_all_sub['spectrum_neutral_mass'].astype(str)
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan_charge_sp_neutral_mass'])
+            
+            elif tide_used == 'ms_fragger':
+                winning_scores = target_decoys_all_sub['hyperscore']
+                labels = target_decoys_all_sub['labels']
+                winning_peptides = target_decoys_all_sub['sequence']
+                rank = target_decoys_all_sub['hit_rank']
+                delta_mass = target_decoys_all_sub['precursor_neutral_mass'] - target_decoys_all_sub['calc_neutral_pep_mass']
+                database = target_decoys_all_sub['database']
+                scan = target_decoys_all_sub['scannum']
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan'])
+            
+            df['originally_discovered'] = True
+            df_extra['originally_discovered'] = False
+            df = pd.concat([df, df_extra])
+        
+        else:
+            logging.info("There are no other sequences with variable modifications that are the top match for an experimentral spectrum.")
+            sys.stderr.write("There are no other sequences with variable modifications that are the top match for an experimentral spectrum. \n")
+        
+        '''
         #gets the STEM sequence
         df['sequence_without_mods_td'] = df['winning_peptides'].str.replace("\\[|\\]|\\.|\d+", "") + "_" + df['labels'].astype(str)
         
@@ -2050,123 +2224,101 @@ def main():
             df['originally_discovered'] = True
             df_extra['originally_discovered'] = False
             df = pd.concat([df, df_extra])
+            
         else:
             logging.info("Sequences with other variable modifications did not have high enough scores to be reported.")
             sys.stderr.write("Sequences with other variable modifications did not have high enough scores to be reported. \n")
-    
-    #report power for 1 and 5% FDR
-    df = df.sort_values(by = ['q_vals', 'winning_scores'], ascending = [True, False])
-    df.reset_index(drop = True, inplace = True)
-    
-    power_1 = sum( ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) )
-    power_5 = sum( ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) )
-    
-    logging.info(str(power_1) + " peptides discovered at the 1% FDR level.")
-    logging.info(str(power_5) + " peptides discovered at the 5% FDR level.")
-    sys.stderr.write(str(power_1) + " peptides discovered at the 1% FDR level. \n")
-    sys.stderr.write(str(power_5) + " peptides discovered at the 5% FDR level. \n")
-    
-    #print Scan multiplicity: 
-    if print_chimera:
-        if tide_used == 'tide':
-            if power_1 > 0:
-                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan']]).value_counts().value_counts()
-                scan_mult1 = pd.DataFrame(scan_mult1)
-                scan_mult1.columns = ['Count']
-                scan_mult1.index.names = ['Scan multiplicity:']
-                
-                logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
-                logging.info(scan_mult1.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
-                sys.stderr.write(scan_mult1.to_string() + "\n")
-            if power_5 > 0:
-                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan']]).value_counts().value_counts()
-                scan_mult5 = pd.DataFrame(scan_mult5)
-                scan_mult5.columns = ['Count']
-                scan_mult5.index.names = ['Scan multiplicity:']
-                
-                logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
-                logging.info(scan_mult5.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
-                sys.stderr.write(scan_mult5.to_string() + "\n")
-        elif tide_used == 'comet':
-            if power_1 > 0:
-                scan_mult1 = df['scan_charge_sp_neutral_mass'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].value_counts().value_counts()
-                scan_mult1 = pd.DataFrame(scan_mult1)
-                scan_mult1.columns = ['Count']
-                scan_mult1.index.names = ['Scan multiplicity:']
-    
-                logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
-                logging.info(scan_mult1.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
-                sys.stderr.write(scan_mult1.to_string() + "\n")
-            if power_5 > 0:
-                scan_mult5 = df['scan_charge_sp_neutral_mass'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].value_counts().value_counts()
-                scan_mult5 = pd.DataFrame(scan_mult5)
-                scan_mult5.columns = ['Count']
-                scan_mult5.index.names = ['Scan multiplicity:']
-    
-                
-                logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
-                logging.info(scan_mult5.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
-                sys.stderr.write(scan_mult5.to_string() + "\n")
-        else:
-            if power_1 > 0:
-                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].value_counts().value_counts()
-                scan_mult1 = pd.DataFrame(scan_mult1)
-                scan_mult1.columns = ['Count']
-                scan_mult1.index.names = ['Scan multiplicity:']
-                
-                logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
-                logging.info(scan_mult1.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
-                sys.stderr.write(scan_mult1.to_string() + "\n")
-            
-            if power_5 > 0:
-                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].value_counts().value_counts()
-                scan_mult5 = pd.DataFrame(scan_mult5)
-                scan_mult5.columns = ['Count']
-                scan_mult5.index.names = ['Scan multiplicity:']
-                
-                logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
-                logging.info(scan_mult5.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
-                sys.stderr.write(scan_mult5.to_string() + "\n")
-        
+        '''
+
+
     
     if tide_used == 'comet' and score == 'e-value':
         df['winning_scores'] = -df['winning_scores']
         
     #changing the name of some of the features for user-readability
     #doing this here since I still want to use more detailed names for creating discrepancies when reviewing code e.g winning_scores vs. score or winning_peptides vs. peptide
-    #df = df[df['labels'] == 1]
-    #df.pop('labels')
-    df.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'all_group_ids':'group_assignment', 'q_vals':'q_value', 'database':'search_file'}, inplace = True)
-    
-    #ordering by peptides
-    if return_extra_mods and any_mods:
-        df['sequence_without_mods'] = df['peptide'].str.replace("\\[|\\]|\\.|\d+", "")
-        df['min_q_vals'] = df.groupby(['sequence_without_mods']).q_value.transform('min')
+    df.pop('all_group_ids') #I don't believe this will be needed in the output for users honestly
+    df_decoys = df[df['labels'] == -1].copy()
+    df = df[df['labels'] == 1]
+    df.pop('labels')
+    df.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'q_vals':'q_value', 'database':'search_file'}, inplace = True)
+    if return_decoys:
+        df_decoys.pop('labels')
+        df_decoys.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'q_vals':'q_value', 'database':'search_file'}, inplace = True)
+        df_decoys = df_decoys.round({'delta_mass':4})
+
+    #ordering by q-value then peptides second
+    if 'originally_discovered' in df.columns:
+        df['sequence_without_mods_td'] = df['peptide'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
+        df['min_q_vals'] = df.groupby(['sequence_without_mods_td']).q_value.transform('min')
         df = df.sort_values(by = ['min_q_vals', 'originally_discovered'], ascending = [True, False])
-        df.pop('sequence_without_mods')
+        df.pop('sequence_without_mods_td')
+        df.pop('min_q_vals')
     
     #rounding the mass differences
     df = df.round({'delta_mass':4})
-    
-    #output the q-values for the remaining winning PSMs
+
+    #dropping q_values
+    df.pop('q_value')
+        
+    #output the discovered peptides
+    if return_extra_mods and any_mods:
+        logging.info("Writing peptides at user-specified FDR level along with extrato directory.")
+        sys.stderr.write("Writing peptides at user-specified FDR level to directory. \n")
+    else:
+        logging.info("Writing peptides at user-specified FDR level to directory.")
+        sys.stderr.write("Writing peptides at user-specified FDR level to directory. \n")
+        
     if output_dir != './':
         if os.path.isdir(output_dir):
-            df.to_csv(output_dir + "/" + file_root, header=True, index = False, sep = '\t')
+            df.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
+            if return_decoys:
+                df_decoys.to_csv(output_dir + "/" + file_root + ".decoy.txt", header=True, index = False, sep = '\t')
         else:
             os.mkdir(output_dir)
-            df.to_csv(output_dir + "/" + file_root, header=True, index = False, sep = '\t')
+            df.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
+            if return_decoys:
+                df_decoys.to_csv(output_dir + "/" + file_root + ".decoy.txt", header=True, index = False, sep = '\t')
     else:
-        df.to_csv(output_dir + "/" + file_root, header=True, index = False, sep = '\t')
+        df.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
+        if return_decoys:
+                df_decoys.to_csv(output_dir + "/" + file_root + ".decoy.txt", header=True, index = False, sep = '\t')
         
     if return_frontier:
-        results[1].to_csv(output_dir + "/" + frontier_name, header=True, index = False, sep = '\t')
+        results[1].to_csv(output_dir + "/" + file_root + ".frontier.txt", header=True, index = False, sep = '\t')
     
+    if return_mass_mod_hist:
+        #Producing histogram for unaccounted for modifications
+        df_mass_mods = df[abs(df['delta_mass']) >= 1].copy()
+        if len(df_mass_mods) > 0:
+            logging.info("Creating histograms for unaccounted mass-modifications.")
+            sys.stderr.write("Creating histograms for unaccounted mass-modifications. \n")
+            delta_mass_min = np.floor(min(df_mass_mods['delta_mass']))
+            delta_mass_max = np.ceil(max(df_mass_mods['delta_mass']))
+            plt.hist(df_mass_mods['delta_mass'], bins = np.arange(delta_mass_min, delta_mass_max + 2, 1) - 0.5, )
+            plt.title('Frequency of unaccounted mass-modifications')
+            plt.xlabel('Mass-modifications (Da)')
+            plt.ylabel('Frequency')
+            plt.savefig(output_dir + "/" + file_root + '.unaccounted-mass-mods.pdf')
+        else:
+            logging.info("No unaccounted mass-modifications.")
+            sys.stderr.write("No unaccounted mass-modifications. \n")
+        
+        #Producing histogram for accounted for modifications
+        variable_mods = df['peptide'].apply(lambda x: re.findall('\\[(.+?)\\]', x))
+        variable_mods_pd = variable_mods.explode().dropna()
+        if len(variable_mods_pd) > 0:
+            logging.info("Counting the number of accounted-for variable mass-modifications.")
+            sys.stderr.write("Counting the number of accounted-for variable mass-modifications. \n")
+            variable_mods_table = pd.DataFrame(variable_mods_pd.value_counts())
+            variable_mods_table.columns = ['Count']
+            variable_mods_table.index.names = ['Modifications:']
+            logging.info(variable_mods_table.to_string())
+            sys.stderr.write(variable_mods_table.to_string() + "\n")
+        else:
+            logging.info("No variable mass-modifications.")
+            sys.stderr.write("No variable mass-modifications. \n")
+        
     end_time = time.time()
     
     logging.info("Elapsed time: " + str(round(end_time - start_time, 2)) + " s")

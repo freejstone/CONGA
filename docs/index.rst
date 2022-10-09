@@ -10,7 +10,7 @@ Welcome to Open Group-walk's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   pages/output_columns
+   pages/output_files
    pages/parameters
    pages/tutorial_example
 
