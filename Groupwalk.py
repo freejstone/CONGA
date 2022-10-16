@@ -141,7 +141,7 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
     
     --thresh <value>      The similarity score used as a threshold to filter
                           out neighbouring peptides.
-                          Default = 0.25.
+                          Default = 0.05.
                           
     --return_filt_search <T|F>  Whether or not to return filtered narrow
                                 and open search files.
@@ -534,14 +534,14 @@ def group_walk(winning_scores, labels, all_group_ids, K = 40, return_frontier = 
 
 ###############################################################################
 #This appears to work perfectly fine
-def filter_scan(search_df, thresh = 0.25, frag_bin_size = 0.05, static_mods = {'C':57.02146}):
+def filter_scan(search_df, thresh = 0.05, frag_bin_size = 0.05, static_mods = {'C':57.02146}):
     '''
     Parameters
     ----------
     search_df : Pandas Dataframe
         Dataframe containing just one scan, and multiple PSMs.
     thresh : float, optional
-        The similarity score threshold used to filter neighbouring PSMs. The default is 0.25.
+        The similarity score threshold used to filter neighbouring PSMs. The default is 0.05.
     frag_bin_size : float, optional
         Size of m/z bins used to determine the shared number of b- and y-ions. The default is 0.05.
     static_mods : dic, optional
@@ -637,7 +637,7 @@ def listener(q, list_of_df, tide_used):
     
 
 ###############################################################################
-def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh = 0.25, n_processes = 1, neighbour_remove = True, tide_used = 'tide', static_mods = {'C':57.02146}):
+def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh = 0.05, n_processes = 1, neighbour_remove = True, tide_used = 'tide', static_mods = {'C':57.02146}):
     '''
     Parameters
     ----------
@@ -650,7 +650,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
     to be considered. The default is 2.
     thresh : float
         The threshold used to determine neighbouring peptides.
-        The default is 0.25.
+        The default is 0.05.
     n_processes : int
         Number of proccesses to be used. The default is 1.
     neighbour_remove : bool
@@ -1391,7 +1391,7 @@ def main():
     min_group_size = 2
     n_top_groups = 4
     neighbour_remove = True
-    thresh = 0.25
+    thresh = 0.05
     #concat = True
     return_filt_search = False
     correction = 1
@@ -1926,7 +1926,7 @@ def main():
             narrow_target_decoys.loc[narrow_target_decoys['protein_id'].str.contains(dcy_prefix), 'target_sequence'] = reverse_sequence(narrow_target_decoys['sequence'][narrow_target_decoys['protein_id'].str.contains(dcy_prefix)])
             open_target_decoys['target_sequence'] = open_target_decoys['sequence']
             open_target_decoys.loc[open_target_decoys['protein_id'].str.contains(dcy_prefix), 'target_sequence'] = reverse_sequence(open_target_decoys['sequence'][open_target_decoys['protein_id'].str.contains(dcy_prefix)])
-
+    
     target_decoys_all = filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh, n_processes, neighbour_remove, tide_used, static_mods)
       
     if tide_used == 'comet':
@@ -1958,6 +1958,9 @@ def main():
         target_decoys_all_open = target_decoys_all[target_decoys_all['database'] == "open"]
         target_decoys_all_narrow.to_csv(output_dir + "/" + "filtered_" + search_file_narrow, header=True, index = False, sep = '\t')
         target_decoys_all_open.to_csv(output_dir + "/" + "filtered_" + search_file_open, header=True, index = False, sep = '\t')
+    
+    if type(peptide_list) != str:
+        peptide_list = peptide_list['target'][~(peptide_list['target'] == peptide_list['decoy'])] #where the two peptides agree
     
     #create groups
     df = create_groups(target_decoys_all, narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
