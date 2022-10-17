@@ -1960,7 +1960,7 @@ def main():
         target_decoys_all_open.to_csv(output_dir + "/" + "filtered_" + search_file_open, header=True, index = False, sep = '\t')
     
     if type(peptide_list) != str:
-        peptide_list = peptide_list['target'][~(peptide_list['target'] == peptide_list['decoy'])] #where the two peptides agree
+        peptide_list = peptide_list[~(peptide_list['target'] == peptide_list['decoy'])] #where the two peptides agree
     
     #create groups
     df = create_groups(target_decoys_all, narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
@@ -2292,7 +2292,7 @@ def main():
     
     if return_mass_mod_hist:
         #Producing histogram for unaccounted for modifications
-        df_mass_mods = df[abs(df['delta_mass']) >= 1].copy()
+        df_mass_mods = df[df['search_file'] == 'open'].copy()
         if len(df_mass_mods) > 0:
             logging.info("Creating histograms for unaccounted mass-modifications.")
             sys.stderr.write("Creating histograms for unaccounted mass-modifications. \n")
@@ -2309,11 +2309,13 @@ def main():
         
         #Producing histogram for accounted for modifications
         variable_mods = df['peptide'].apply(lambda x: re.findall('\\[(.+?)\\]', x))
-        variable_mods_pd = variable_mods.explode().dropna()
-        if len(variable_mods_pd) > 0:
+        variable_mods_inds = variable_mods.apply(lambda x: len(x) > 0)
+        variable_mods = variable_mods[variable_mods_inds]
+        variable_mods = variable_mods.sort_values().apply(lambda x: sorted(x))
+        if len(variable_mods) > 0:
             logging.info("Counting the number of accounted-for variable mass-modifications.")
             sys.stderr.write("Counting the number of accounted-for variable mass-modifications. \n")
-            variable_mods_table = pd.DataFrame(variable_mods_pd.value_counts())
+            variable_mods_table = pd.DataFrame(variable_mods.value_counts())
             variable_mods_table.columns = ['Count']
             variable_mods_table.index.names = ['Modifications:']
             logging.info(variable_mods_table.to_string())
