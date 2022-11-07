@@ -32,7 +32,7 @@ The software will automatically detect if the PSMs in the search files have been
 
 ``python3 Groupwalk.py narrow_example2.tide-search.target.txt open_example2.tide-search.target.txt``
 
-You can download the search files to test the above commands :download:`here <files/tide/tide.zip>`.
+You can download the search files to test the above commands: `Tide-search files <https://github.com/freejstone/open_groupwalk/tree/main/docs/pages/files/tide>`_.
 
 =====
 Comet
@@ -46,7 +46,7 @@ There is no need to provide a list of target-decoy pairs, as Comet always revers
 
 All other discussion in :ref:`Crux-Tide` equally applies to Comet-search files.
 
-You can download the search files to test the above commands :download:`here <files/comet/comet.zip>`.
+You can download the search files to test the above commands: `Comet-search files <https://github.com/freejstone/open_groupwalk/tree/main/docs/pages/files/comet>`_.
 
 =========
 MSFragger
@@ -79,4 +79,4 @@ The default precision of the mass-modifications in Tide-index is to two decimal 
 
 Like Comet, the score needs to be specified as the default is Tailor score. All other discussion in :ref:`Crux-Tide` equally applies to MSFragger-search files.
 
-You can download the search files to test the above commands :download:`here <files/MS/ms.zip>`.
+You can download the search files to test the above commands: `MSFragger-search files <https://github.com/freejstone/open_groupwalk/tree/main/docs/pages/files/MS>`_.
