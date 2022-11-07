@@ -15,7 +15,7 @@ A link to the documentation on read-the-docs will go here. For now, I will house
 Paper
 =====
 
-A link to the biorXiv paper will go here.
+A link to the biorXiv paper will eventually go here.
 
 Installation
 ============

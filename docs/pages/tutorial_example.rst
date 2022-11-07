@@ -12,16 +12,71 @@ On this page we walkthrough a simple example of running Open Group-walk for the 
 Crux-Tide
 =========
 
-Crux-Tide explanation to go in here.
+To run Open Group-walk using Tide-search results with default parameters, use the following command in the terminal.
+
+``python3 Groupwalk.py narrow_example1.tide-search.txt open_example1.tide-search.txt``
+
+Open Group-walk collapses peptides that are equal up to variable modifications by selecting the best-scoring peptide. If you want to run Open Group-walk without this collapsing, and thus allowing the discovery of peptides that differ by some variable modification, you can turn this collapsing off by setting ``--account_mods F``. Note that the assumptions of theoretical FDR control do not strictly hold in this case, as target peptides with variable modifications may be scored highly, simply because they share similar b- and y-ions in common to the same target peptide with possibly a different set of variable modifications. In any case, if you wish to run without this collapsing, you will need to provide the target-decoy peptide pairs produced by Tide-index.
+
+``python3 Groupwalk.py --account_mods F narrow_example1.tide-search.txt open_example1.tide-search.txt tide-index_example1.peptides.txt``
+
+Alternatively, it might be of interest to report all other top 1 matched peptides that differ to a geuinely discovered peptide by some variable modification(s). One can achieve this by setting ``--return_extra_mods T``. You can use the following command.
+
+``python3 Groupwalk.py --return_extra_mods T narrow_example1.tide-search.txt open_example1.tide-search.txt``
+
+The default score uses Tailor Scores. If you prefer to use Xcorr Scores, you can change the score option ``--score xcorr_score``. The following command will achieve this.
+
+``python3 Groupwalk.py --score xcorr_score narrow_example1.tide-search.txt open_example1.tide-search.txt``
+
+The software will automatically detect if the PSMs in the search files have been searched against a concatenated target-decoy database or separately against each database. If the latter, then you will need to have the name *target* appear in the search file names. In that case, the software will search for the respective decoy-search files by replacing *target* for *decoy* in the search file names in the same directory.
+
+``python3 Groupwalk.py narrow_example2.tide-search.target.txt open_example2.tide-search.target.txt``
+
+You can download the search files to test the above commands :download:`here <files/tide/tide.zip>`.
 
 =====
 Comet
 =====
 
-Comet explanation to go in here.
+You can use either standalone Comet or Comet in Crux. The software will automatically standardize the difference in terminology between the standalone version and the one in Crux. To run Open Group-walk using Comet-search results with default parameters, use the following command in the terminal.
+
+``python3 Groupwalk.py --score e-value narrow_example1.comet.txt open_example1.comet.txt``
+
+There is no need to provide a list of target-decoy pairs, as Comet always reverses their target peptides to yield decoy peptides. Comet can use either Xcorr scores or E-values. You will need to specify the score, as the default is Tailor score which will flag the user to choose a different score.
+
+All other discussion in :ref:`Crux-Tide` equally applies to Comet-search files.
+
+You can download the search files to test the above commands :download:`here <files/comet/comet.zip>`.
 
 =========
 MSFragger
 =========
 
-MSFragger explanation to go in here.
+Using MSFragger search files is more challenging. MSFragger nor any of the related softwares in Fragpipe produce decoy peptides that *pair* with the target peptides, which is essential for Open Group-walk. Unfortunately not even reversing the entire protein sequence and digesting the protein to produce decoy peptides yields the same result as reversing the target peptides. Instead the user must always provide a target-decoy pairing in the same format as what Tide-Index produces. This is reasonably achievable by matching the parameters in tide-index with MSFragger. More specifically we have the following equivalencies between the two softwares.
+
+.. list-table:: Parameters
+   :widths: 50 50
+   :header-rows: 1
+
+   * - Tide-index
+     - MSFragger
+   * - --enzyme
+     - search_enzyme_name_1
+   * - --missed_cleavages
+     - allowed_missed_cleavage_1
+   * - --max_mods
+     - max_variable_mods_combinations
+   * - --max_length
+     - digest_max_length
+   * - --min_length
+     - digest_min_length
+   * - --min_mass, --max_mass
+     - digest_mass_range
+
+The default precision of the mass-modifications in Tide-index is to two decimal places, while MSFragger is much larger. For this reason, Open Group-walk will round the variable modifications in the MSFragger search files to two decimal places, allowing for us to pair the peptides in MSFRagger according to the target-decoy pairs produced by Tide-index. To run Open Group-walk using MSFragger-search results with default parameters, use the following command in the terminal.
+
+``python3 Groupwalk.py --score hyperscore narrow.tsv open.tsv tide-index.peptides.txt``
+
+Like Comet, the score needs to be specified as the default is Tailor score. All other discussion in :ref:`Crux-Tide` equally applies to MSFragger-search files.
+
+You can download the search files to test the above commands :download:`here <files/MS/ms.zip>`.

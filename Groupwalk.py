@@ -26,21 +26,19 @@ from matplotlib import pyplot as plt
 
 USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
 
-  This program implements the open Group-walk algorithm, including the
+  This script implements the open Group-walk algorithm, including the
   creation of groups and the filtering procedure that eliminates
   similar peptide matches per scan. The first input file is the narrow
   search file output, the second input file is the open search file
   output, and the last input file contains the target-decoy peptide
-  pairs. Output is a list of PSMs and their corresponding q-values.
+  pairs. Output is a list of peptides discovered at a user-specified FDR-level.
   The input search files can be either tab-delimited .txt Tide-search files,
   tab-delimited .txt Comet search files, or tab-delimited .tsv files from 
   MSFragger. The target-decoy pairs should be given in a format similar
   to Tide-index's peptide list. Target-decoy peptide pairs is not required for
-  Comet since Comet reverses target peptide sequences. The output file is
-  a tab-delimited .txt file containing the following information about the
-  PSMs used by groupwalk: the peptide sequence, the scan number, the score, 
-  the target-decoy label, whether the PSM came from the narrow or open search
-  file, and a q-value.
+  Comet since Comet reverses target peptide sequences. The target-decoy peptide
+  pairs is also not required for Tide since we can use the original.target.sequence
+  column in the output search file (unless --account_mods F is used).
 
   Options:
       
@@ -67,16 +65,16 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                           the neighbour-filtering process.
                           Default = 5.     
                           
-
-    --score <string>      Either 'tailor_score', 'xcorr_xcore', 'e-value' or 'hyperscore'. 
-                          The score that will be used by group-walk. If
-                          'tailor', it is assumed the search files are 
-                          derived from Tide. If 'xcorr', either Tide 
-                          search or Comet is assumed to be used. If 
-                          'e-value', Comet is assumed. If 'hyper' it 
-                          is assumed the search files are derived from
-                          MS-Fragger.
-                          Default = 'tailor'.
+    --score <string>      Either 'tailor_score', 'xcorr_score', 'e-value' or
+                          'hyperscore'. The score that will be used in the 
+                          peptide-level competition and subsequent Group 
+                          construction and Group-walk algorithm. If 
+                          'tailor_score', it is assumed the search files are 
+                          derived from Tide. If 'xcorr_score', either Tide 
+                          search or Comet is assumed to be used. If 'e-value',
+                          Comet is assumed. If 'hyperscore' it is assumed the
+                          search files are derived from MS-Fragger.
+                          Default = 'tailor_score'.
     
     --account_mods <T|F>  To determine whether the group-walk algorithm
                           selects the best PSM among the equivalent
@@ -91,7 +89,7 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                                     Default = F.
                           
     --precursor_bin_width <value>   To determine the size of the bins
-                                    used to create discretize the mass-
+                                    used to discretize the mass-
                                     differences between the sample
                                     and theoretical spectra.
                                     Default = 1.0005079/4.
@@ -109,7 +107,7 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
             
     --group_thresh <value>         The p-value threshold used to determine
                                    whether groups are merged or kept
-                                   separate.
+                                   separate in the KS test.
                                    Default = 0.01.
                                    
     --print_group_pi0 <T|F>        To determine whether the group-level
@@ -117,7 +115,7 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                                    log file.
                                    Default = T.
     
-    --min_group_size <integer>     The number of multiples of K that the
+    --min_group_size <integer>     The number of multiples of K that is
                                    used to determine the minimum size of
                                    each group. See option --K.
                                    Default = 2.
@@ -178,7 +176,9 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
     --dcy_prefix <string>       The prefix used for the decoy proteins.
                                 Default = 'decoy_'
 
-    --return_decoys <T|F>       Also report decoys. Default = F. 
+    --return_decoys <T|F>       Also report decoys used to estimate the 
+                                number of false discoveries. 
+                                Default = F. 
                                 
     --seed <int>          Set random seed.
                           Default = None.
@@ -1000,7 +1000,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         winning_peptides = target_decoys_final['sequence']
         if score == 'e-value':
             rank = target_decoys_final['e_rank']
-        if score == 'xcorr':
+        if score == 'xcorr_score':
             rank = target_decoys_final['xcorr_rank']
         delta_mass = target_decoys_final['spectrum_neutral_mass'] - target_decoys_final['peptide_mass']
         database = target_decoys_final['database']
@@ -1282,7 +1282,7 @@ def add_modification_to_amino_acid(df, static_mods):
             if aa_list[site] in static_mods:
                 if abs(static_mods[aa_list[site]] - float(mass)) <= 10**(-4):
                     continue
-            aa_list[site] = aa_list[site] + '[' + mass + ']'
+            aa_list[site] = aa_list[site] + '[' + round(mass, 2) + ']'
             
         return(aa_list)
 
@@ -1392,7 +1392,6 @@ def main():
     n_top_groups = 4
     neighbour_remove = True
     thresh = 0.05
-    #concat = True
     return_filt_search = False
     correction = 1
     n_processes = 1
@@ -1552,7 +1551,7 @@ def main():
             seed = int(sys.argv[0])
             sys.argv = sys.argv[1:]
         else:
-            sys.stderr.write("Invalid option (%s).c" % next_arg)
+            sys.stderr.write("Invalid option (%s)" % next_arg)
             sys.exit(1)
     if (len(sys.argv) == 2):
         search_file_narrow = sys.argv[0]
@@ -1577,7 +1576,7 @@ def main():
         else:
             os.mkdir(output_dir)
             logging.basicConfig(filename=output_dir + "/" + file_root  + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
-
+    
     #print CPU info
     logging.info('CPU: ' + str(platform.platform()))
     sys.stderr.write('CPU: ' + str(platform.platform()) + " \n")
@@ -1656,7 +1655,6 @@ def main():
         logging.info("Tide search files detected.")     
         
     
-    
     #rename protein id for consistency
     if tide_used == 'ms_fragger':
         narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
@@ -1701,7 +1699,7 @@ def main():
         logging.info('Please make both search files contain the PSMs against the target-decoy database, or just the target database.')
         sys.stderr.write('Decoy peptides detected in one file, but not detected in the other. \n')
         sys.exit('Please make both search files contain the PSMs against the target-decoy database, or just the target database. \n')
-
+        
     if concat:
         #take the top 1 PSM for narrow search and top 'tops_open' PSM for open search
         if tide_used == 'tide':
@@ -1713,7 +1711,7 @@ def main():
             narrow_target_decoys['xcorr_rank'] = narrow_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
             open_target_decoys = open_target_decoys.sample(frac = 1).reset_index(drop=True)
-            open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["e-value"].rank("first", ascending=False)
+            open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
         elif tide_used == 'comet' and score == 'e-value':
             narrow_target_decoys = narrow_target_decoys.sample(frac = 1).reset_index(drop=True)
@@ -1727,7 +1725,7 @@ def main():
             open_target_decoys = open_target_decoys[open_target_decoys['hit_rank'].isin(range(1, tops_open + 1))]
         
         if tide_used == 'tide':
-            #This is redundant currently, as original_target_sequence is being printed WITHOUT modification (but this is a current bug in tide-search, so we run this anyways)
+            #This is redundant currently, as original_target_sequence is being printed WITHOUT modification (but this is may change in tide-search, so we run this anyways)
             narrow_target_decoys['original_target_sequence'] = narrow_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
             open_target_decoys['original_target_sequence'] = open_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
             
@@ -1809,10 +1807,10 @@ def main():
   
         #Creating original_target_sequence column for target files too, so that they exist when we concatenate our target and decoy search files
         if tide_used == 'tide':
-            narrow_1['original_target_sequence'] = narrow_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "")
-            open_1['original_target_sequence'] = open_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "")
-            narrow_2['original_target_sequence'] = narrow_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "")
-            open_2['original_target_sequence'] = open_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "")
+            narrow_1['original_target_sequence'] = narrow_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
+            open_1['original_target_sequence'] = open_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
+            narrow_2['original_target_sequence'] = narrow_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
+            open_2['original_target_sequence'] = open_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
 
         if not len(narrow_1.columns) == len(narrow_2.columns):
             logging.error("Search files have different number of columns.")
@@ -2138,103 +2136,7 @@ def main():
             logging.info("There are no other sequences with variable modifications that are the top match for an experimentral spectrum.")
             sys.stderr.write("There are no other sequences with variable modifications that are the top match for an experimentral spectrum. \n")
         
-        '''
-        #gets the STEM sequence
-        df['sequence_without_mods_td'] = df['winning_peptides'].str.replace("\\[|\\]|\\.|\d+", "") + "_" + df['labels'].astype(str)
         
-        if type(peptide_list) == str:
-            target_decoys_all['labels'] = (~(target_decoys_all['protein_id'].str.contains(dcy_prefix))).astype(int)
-            target_decoys_all.loc[target_decoys_all['labels'] == 0, 'labels'] = -1
-        else:
-            target_decoys_all['labels'] = target_decoys_all['sequence'].isin(peptide_list['target'])
-            target_decoys_all['labels'].replace({True:1, False:-1}, inplace = True)
-            
-        
-        target_decoys_all['sequence_without_mods_td'] = target_decoys_all['sequence'].str.replace("\\[|\\]|\\.|\d+", "") + "_" + target_decoys_all['labels'].astype(str)
-        
-        #get all target PSMs whose sequence equals to one in df up to modification but isn't exactly equal to the same sequence in df.
-        target_decoys_all_sub = target_decoys_all[( target_decoys_all['sequence_without_mods_td'].isin(df['sequence_without_mods_td']) ) & ( target_decoys_all['labels'] == 1 ) & ~( target_decoys_all['sequence'].isin(df['winning_peptides']) )].copy()
-        
-        if score != 'e-value':
-            target_decoys_all_sub = target_decoys_all_sub.sort_values(by=[score], ascending=False)
-        else:
-            target_decoys_all_sub = target_decoys_all_sub.sort_values(by=[score], ascending=True)
-        
-        target_decoys_all_sub = target_decoys_all_sub.drop_duplicates(subset = ['sequence'])
-        
-        sorted_groups = {}
-        for group in df['all_group_ids'].unique():
-            df_new = df[df['all_group_ids'] == group].copy()
-            df_new.reset_index(drop = True, inplace = True)
-            sorted_groups[group] = df_new
-    
-        def get_qval_group(df_temp):
-            sequence_without_mod= df_temp['sequence_without_mods_td']
-            score_val = df_temp[score]
-            group_id = df['all_group_ids'][df['sequence_without_mods_td'] == sequence_without_mod].values[0]
-            get_group = sorted_groups[group_id]
-            pos = get_group['winning_scores'].searchsorted(score_val, side = 'left')
-            q_val = get_group['q_vals'][pos]
-            return([q_val, group_id])
-        
-        q_vals_and_groups = target_decoys_all_sub[['sequence_without_mods_td', score]].apply(get_qval_group, axis = 1)
-        
-        if len(q_vals_and_groups) > 0:
-            target_decoys_all_sub[['q_vals', 'all_group_ids']] = pd.DataFrame(q_vals_and_groups.values.tolist(), index= target_decoys_all_sub.index)
-            
-            #df = df.drop('sequence_without_mods_td', axis = 1)
-            
-            if tide_used == 'tide':
-                winning_scores = target_decoys_all_sub[score]
-                labels = target_decoys_all_sub['labels']
-                winning_peptides = target_decoys_all_sub['sequence']
-                rank = target_decoys_all_sub['xcorr_rank']
-                delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
-                database = target_decoys_all_sub['database']
-                scan = target_decoys_all_sub['scan']
-                q_vals = target_decoys_all_sub['q_vals']
-                file = target_decoys_all_sub['file']
-                all_group_ids = target_decoys_all_sub['all_group_ids']
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, file, all_group_ids, q_vals), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'file', 'all_group_ids', 'q_vals'])
-                
-            elif tide_used == 'comet':
-                winning_scores = target_decoys_all_sub[score]
-                labels = target_decoys_all_sub['labels']
-                winning_peptides = target_decoys_all_sub['sequence']
-                if score == 'e-value':
-                    rank = target_decoys_all_sub['e_rank']
-                if score == 'xcorr_score':
-                    rank = target_decoys_all_sub['xcorr_rank']
-                delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
-                database = target_decoys_all_sub['database']
-                scan = target_decoys_all_sub['scan'].astype(str) + ' ' + target_decoys_all_sub['charge'].astype(str) + ' ' + target_decoys_all_sub['spectrum_neutral_mass'].astype(str)
-                q_vals = target_decoys_all_sub['q_vals']
-                all_group_ids = target_decoys_all_sub['all_group_ids']
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, all_group_ids, q_vals), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan_charge_sp_neutral_mass', 'all_group_ids', 'q_vals'])
-            
-            elif tide_used == 'ms_fragger':
-                winning_scores = target_decoys_all_sub['hyperscore']
-                labels = target_decoys_all_sub['labels']
-                winning_peptides = target_decoys_all_sub['sequence']
-                rank = target_decoys_all_sub['hit_rank']
-                delta_mass = target_decoys_all_sub['precursor_neutral_mass'] - target_decoys_all_sub['calc_neutral_pep_mass']
-                database = target_decoys_all_sub['database']
-                scan = target_decoys_all_sub['scannum']
-                q_vals = target_decoys_all_sub['q_vals']
-                all_group_ids = target_decoys_all_sub['all_group_ids']
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, all_group_ids, q_vals), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'all_group_ids', 'q_vals'])
-            
-            df['originally_discovered'] = True
-            df_extra['originally_discovered'] = False
-            df = pd.concat([df, df_extra])
-            
-        else:
-            logging.info("Sequences with other variable modifications did not have high enough scores to be reported.")
-            sys.stderr.write("Sequences with other variable modifications did not have high enough scores to be reported. \n")
-        '''
-
-
-    
     if tide_used == 'comet' and score == 'e-value':
         df['winning_scores'] = -df['winning_scores']
         
