@@ -2,14 +2,14 @@
 Parameters
 """""""""""
 
-We provide the following descriptions of the input parameters used by Groupwalk.py.
+Groupwalk.py supports the following input parameters:
 
 -------------------
 Neighbor filtration
 -------------------
 
 * ``-- tops_open <integer>``: The number of top PSMs in the open search file used in the neighbour-filtering process. Default = 5.
-* ``--neighbour_remove <T|F>``: If true, for each scan, we successively move down the list of PSMs associated with each scan, ordered in terms of the score from highest to lowest,  and compute a similarity score between the current peptide and the previous peptide(s). If one of the similarity score(s) exceeds a certain threshold, the PSM associated with the current peptide is thrown out, and we proceed to the next.
+* ``--neighbour_remove <T|F>``: If true, for each scan, we successively move down the list of PSMs associated with each scan, ordered in terms of the score from highest to lowest,  and compute a similarity score between the current peptide and the previous peptide(s). If one of the similarity score(s) exceeds a certain threshold, then the PSM associated with the current peptide is thrown out, and we proceed to the next.
 * ``--thresh <float>``: The similarity score used as a threshold to filter out neighbouring peptides. Default = 0.05.
 * ``--return_filt_search <T|F>``:  Whether or not to return filtered narrow and open search files. Default = F.
 
@@ -17,14 +17,14 @@ Neighbor filtration
 Peptide-level competition
 -------------------------
 
-* ``--score <string>``: Either 'tailor_score', 'xcorr_score', 'e-value' or 'hyperscore'. The score that will be used in the peptide-level competition and subsequent Group construction and Group-walk algorithm. If 'tailor_score', it is assumed the search files are derived from Tide. If 'xcorr_score', either Tide search or Comet is assumed to be used. If 'e-value', Comet is assumed. If 'hyperscore' it is assumed the search files are derived from MS-Fragger. Default = 'tailor_score'.
+* ``--score <string>``: Either 'tailor_score', 'xcorr_score', 'e-value' or 'hyperscore'. The score that will be used in the peptide-level competition and subsequent Group construction and Group-walk algorithm. If 'tailor_score', it is assumed the search files are derived from Tide. If 'xcorr_score', either Tide or Comet is assumed to be used. If 'e-value', Comet is assumed. If 'hyperscore' it is assumed the search files are derived from MS-Fragger. Default = 'tailor_score'.
 * ``--account_mods <T|F>``: To determine whether the group-walk algorithm uses the best PSM among the equivalent classes of peptides which are equal up to variable modification, or not. Default = T.
 
 ------------------
 Group construction
 ------------------
 
-* ``--precursor_bin_width <value>``: To determine the size of the bins used to discretize the mass-differences between the sample and theoretical spectra. Default = 1.0005079/4.
+* ``--precursor_bin_width <value>``: To determine the size of the bins used to discretize the mass-differences between the sample and theoretical spectra. Default = 1.00050794.
 * ``--adaptive <T|F>``: To determine whether groups should be chosen using the Kolmogorov-Smirnov test or if a fixed procedure should be used. Default = T.
 * ``--min_group_size <integer>``: The number of multiples of K that is used to determine the minimum size of each group. See option ``--K``. Default = 2.
 * ``--tops_gw <integer>``: The number of top PSMs for each scan in the open search that will be used by group-walk. Default = 2.
