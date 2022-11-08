@@ -20,7 +20,7 @@ Open Group-walk collapses peptides that are equal up to variable modifications b
 
 ``python3 Groupwalk.py --account_mods F narrow_example1.tide-search.txt open_example1.tide-search.txt tide-index_example1.peptides.txt``
 
-Alternatively, it might be of interest to report all other top 1 matched peptides that differ to a geuinely discovered peptide by some variable modification(s). One can achieve this by setting ``--return_extra_mods T``. You can use the following command.
+Alternatively, it might be of interest to report all other top 1 matched peptides that differ to a genuinely discovered peptide by some variable modification(s). One can achieve this by setting ``--return_extra_mods T``. You can use the following command.
 
 ``python3 Groupwalk.py --return_extra_mods T narrow_example1.tide-search.txt open_example1.tide-search.txt``
 
@@ -55,6 +55,7 @@ MSFragger
 Using MSFragger search files is more challenging. MSFragger nor any of the related softwares in Fragpipe produce decoy peptides that *pair* with the target peptides, which is essential for Open Group-walk. Unfortunately not even reversing the entire protein sequence and digesting the protein to produce decoy peptides yields the same result as reversing the target peptides. Instead the user must always provide a target-decoy pairing in the same format as what Tide-Index produces. This is reasonably achievable by matching the parameters in tide-index with MSFragger. More specifically we have the following equivalencies between the two softwares.
 
 .. list-table:: Parameters
+   :align: center
    :widths: 50 50
    :header-rows: 1
 
