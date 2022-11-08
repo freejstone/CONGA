@@ -21,8 +21,6 @@ Open Group-walk is a tool for discovering peptides in mass-spectrometry data wit
 
 Links
 =====
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
 * Source code: https://github.com/freejstone/open_groupwalk
 * Paper: To be added
+* :ref:`search`

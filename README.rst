@@ -10,7 +10,7 @@ Open Group-walk is a tool for discovering peptides in mass-spectrometry data wit
 Documentation
 =============
 
-A link to the documentation on read-the-docs will go here. For now, I will house it all locally using .rst files, which then can be easily transported over. Documentation will include a basic example, explanation of input parameters, and an explanation of columns in the output file. Not sure if we should also have a module-index since there is really only one module (users aren't able to use the individual functions used by main).
+You can find documentation on how to use Open Group-walk over on `readtheddocs <https://open-groupwalk.readthedocs.io/en/latest/>`_. Alternatively you can find the same documentation under docs/pages in this respository.
 
 Paper
 =====
