@@ -54,13 +54,9 @@ All other discussion in :ref:`Crux-Tide` equally applies to Comet search files.
 MSFragger
 =========
 
-<<<<<<< HEAD
 You can download the search files to test the commands below: `MSFragger-search files <https://github.com/freejstone/open_groupwalk/tree/main/docs/pages/files/MS>`_.
 
-Using MSFragger search files is more challenging. Neither MSFragger nor any of the related software in Fragpipe produce decoy peptides that *pair* with the target peptides, which is essential for Open Group-walk. Unfortunately, not even reversing the entire protein sequence and digesting the protein to produce decoy peptides yields the same result as reversing the target peptides. Instead, the user must always provide a target-decoy pairing in the same format as what tide-Index produces. This is reasonably achievable by matching the parameters in tide-index with MSFragger. More specifically, we have the following equivalencies between the two pieces of software:
-=======
 Using MSFragger search files is more challenging. MSFragger nor any of the related softwares in Fragpipe produce decoy peptides that *pair* with the target peptides, which is essential for Open Group-walk. Unfortunately not even reversing the entire protein sequence and digesting the protein to produce decoy peptides yields the same result as reversing the target peptides. Instead the user must always provide a target-decoy pairing in the same format as what Tide-Index produces. You can do this by creating your own script or by implementing Tide-index. This is reasonably achievable by matching the parameters in tide-index with MSFragger. More specifically we have the following equivalencies between the two softwares.
->>>>>>> 0886486 (downloading Bill's edits to the documentation)
 
 .. list-table:: Parameters
    :align: center

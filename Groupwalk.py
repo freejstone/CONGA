@@ -1261,17 +1261,17 @@ def add_modification_to_amino_acid(df, static_mods):
     mods = df[1]
     
     if type(mods) == float:
-        return aa_list
+        return aa_list #to throw away when we have NaN appear
     else:
         for i in np.arange(0, len(mods), 2):
             #If the modification determined in MSFragger coin 
             #then we assume it is a static-modification.      
-            if (i == 0) & ("nterm" in static_mods):
+            if (float(mods[i]) == 1) & ("nterm" in static_mods):
                 continue
-            if (i == len(mods) - 2) & ("cterm" in static_mods):
+            if (float(mods[i]) == len(aa_list)) & ("cterm" in static_mods):
                 continue
             
-            if mods[i] == "N-term":
+            if mods[i] == "N-term": #captail N/C refer to terminals of proteins
                 site = 0
             elif mods[i] == "C-term":
                 site = len(aa_list) - 1
@@ -1282,7 +1282,7 @@ def add_modification_to_amino_acid(df, static_mods):
             if aa_list[site] in static_mods:
                 if abs(static_mods[aa_list[site]] - float(mass)) <= 10**(-4):
                     continue
-            aa_list[site] = aa_list[site] + '[' + round(mass, 2) + ']'
+            aa_list[site] = aa_list[site] + '[' + str(round(float(mass), 2)) + ']'
             
         return(aa_list)
 
@@ -1954,8 +1954,8 @@ def main():
         sys.stderr.write("Returning filtered search files in output directory. \n")
         target_decoys_all_narrow = target_decoys_all[target_decoys_all['database'] == "narrow"]
         target_decoys_all_open = target_decoys_all[target_decoys_all['database'] == "open"]
-        target_decoys_all_narrow.to_csv(output_dir + "/" + "filtered_" + search_file_narrow, header=True, index = False, sep = '\t')
-        target_decoys_all_open.to_csv(output_dir + "/" + "filtered_" + search_file_open, header=True, index = False, sep = '\t')
+        target_decoys_all_narrow.to_csv(output_dir + "/" + file_root + ".narrow.filtered.txt", header=True, index = False, sep = '\t')
+        target_decoys_all_open.to_csv(output_dir + "/" + file_root + ".open.filtered.txt", header=True, index = False, sep = '\t')
     
     if type(peptide_list) != str:
         peptide_list = peptide_list[~(peptide_list['target'] == peptide_list['decoy'])] #where the two peptides agree
