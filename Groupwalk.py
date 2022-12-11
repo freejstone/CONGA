@@ -26,7 +26,7 @@ from matplotlib import pyplot as plt
 
 USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
 
-  This script implements the open Group-walk algorithm, including the
+  This script implements the CONGA algorithm, including the
   creation of groups and the filtering procedure that eliminates
   similar peptide matches per scan. The first input file is the narrow
   search file output, the second input file is the open search file
@@ -595,20 +595,12 @@ def filter_scan_subset(df, q, task_number, return_dict, tide_used, score, thresh
         results = results.apply(pd.Series).stack().reset_index()
         return_dict[task_number] = results[0]
     elif tide_used == 'comet':
-        if score == 'e-value':
-            sys.stderr.write("Starting Process " + str(task_number) + " \n")
-            logging.info("Starting Process " + str(task_number))
-            results = df.groupby(['scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
-            results = results.sort_index(ascending = True) #Note that ascending is true here
-            results = results.apply(pd.Series).stack().reset_index()
-            return_dict[task_number] = results[0]
-        else:
-            sys.stderr.write("Starting Process " + str(task_number) + " \n")
-            logging.info("Starting Process " + str(task_number))
-            results = df.groupby(['scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
-            results = results.sort_index(ascending = False) #Note that ascending is false here for xcorr
-            results = results.apply(pd.Series).stack().reset_index()
-            return_dict[task_number] = results[0]
+        sys.stderr.write("Starting Process " + str(task_number) + " \n")
+        logging.info("Starting Process " + str(task_number))
+        results = df.groupby(['scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+        results = results.sort_index(ascending = False)
+        results = results.apply(pd.Series).stack().reset_index()
+        return_dict[task_number] = results[0]
     else:
         sys.stderr.write("Starting Process " + str(task_number) + " \n")
         logging.info("Starting Process " + str(task_number))
@@ -678,10 +670,8 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
     #normalise the xcorr_score - this differs from narrow to open. 
     if tide_used == 'tide':
         target_decoys_all = target_decoys_all.sort_values(by=['file', 'scan', 'xcorr_score'], ascending = False)
-    elif tide_used == 'comet' and score == 'xcorr_score':
+    elif tide_used == 'comet':
         target_decoys_all = target_decoys_all.sort_values(by=['scan', "charge", "spectrum_neutral_mass", 'xcorr_score'], ascending = False)
-    elif tide_used == 'comet' and score == 'e-value':
-        target_decoys_all = target_decoys_all.sort_values(by=['scan', "charge", "spectrum_neutral_mass", 'e-value'], ascending = True)
     else:
         target_decoys_all = target_decoys_all.sort_values(by=['scannum', 'hyperscore'], ascending = False)
     target_decoys_all.reset_index(drop = True, inplace = True)
@@ -703,12 +693,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
         else:
             results = target_decoys_all.groupby('scannum').progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods))  #apply filtering by experimental scan
         
-        #we sort the results in ascending order since target_decoys_all have been sorted in such a manner
-        #results get produced in ascending order
-        if score == 'e-value':
-            results = results.sort_index(ascending = True) 
-        else:
-            results = results.sort_index(ascending = False)
+        results = results.sort_index(ascending = False)
         results = results.apply(pd.Series).stack().reset_index()
         
         target_decoys_all['drop_scan'] = results[0]  #create drop_scan column indicating which PSMs are being kept
@@ -789,10 +774,8 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
 
     '''
     #take only the top 1 from the narrow search
-    if score == 'xcorr_score' or score == 'tailor_score':
+    if score == 'xcorr_score' or score == 'tailor_score' or score == 'e-value':
         narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
-    elif score == 'e-value':
-        narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['e_rank'] == 1]
     else:
         narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['hit_rank'] == 1]
     narrow_target_decoys.loc[:, 'database'] = 'narrow'
@@ -811,7 +794,6 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     target_decoys_narrow = target_decoys[target_decoys['database'] == "narrow"]
     
     if type(peptide_list) != str:
-        #peptide_list here since MSFragger assigns decoy peptides very slightly differently than what peptide_list does in tide-index
         targets_narrow = target_decoys_narrow[target_decoys_narrow['sequence'].isin(peptide_list['target'])].copy()
         decoys_narrow = target_decoys_narrow[target_decoys_narrow['sequence'].isin(peptide_list['decoy'])].copy()
         
@@ -830,12 +812,9 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     targets_open['target_decoy'] = 'target'
     decoys_open['target_decoy'] = 'decoy'
     
-    if score == 'xcorr_score' or score == 'tailor_score':
+    if score == 'xcorr_score' or score == 'tailor_score' or score == 'e-value':
         targets_open = targets_open[targets_open['xcorr_rank'].isin(range(1, tops + 1))]
         decoys_open = decoys_open[decoys_open['xcorr_rank'].isin(range(1, tops + 1))]    
-    elif score == 'e-value':
-        targets_open = targets_open[targets_open['e_rank'].isin(range(1, tops + 1))]
-        decoys_open = decoys_open[decoys_open['e_rank'].isin(range(1, tops + 1))]
     else:
         targets_open = targets_open[targets_open['hit_rank'].isin(range(1, tops + 1))]
         decoys_open = decoys_open[decoys_open['hit_rank'].isin(range(1, tops + 1))]
@@ -998,10 +977,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         labels[labels == 'target'] = 1
         labels[labels == 'decoy'] = -1
         winning_peptides = target_decoys_final['sequence']
-        if score == 'e-value':
-            rank = target_decoys_final['e_rank']
-        if score == 'xcorr_score':
-            rank = target_decoys_final['xcorr_rank']
+        rank = target_decoys_final['xcorr_rank']
         delta_mass = target_decoys_final['spectrum_neutral_mass'] - target_decoys_final['peptide_mass']
         database = target_decoys_final['database']
         scan = target_decoys_final['scan'].astype(str) + ' ' + target_decoys_final['charge'].astype(str) + ' ' + target_decoys_final['spectrum_neutral_mass'].astype(str)
@@ -1705,21 +1681,12 @@ def main():
         if tide_used == 'tide':
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
-        elif (tide_used == 'comet' and score == 'xcorr_score'):
+        elif (tide_used == 'comet'):
             #native comet does not have xcorr_rank, so do this regardless
-            narrow_target_decoys = narrow_target_decoys.sample(frac = 1).reset_index(drop=True)
             narrow_target_decoys['xcorr_rank'] = narrow_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
-            open_target_decoys = open_target_decoys.sample(frac = 1).reset_index(drop=True)
             open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
-        elif tide_used == 'comet' and score == 'e-value':
-            narrow_target_decoys = narrow_target_decoys.sample(frac = 1).reset_index(drop=True)
-            narrow_target_decoys['e_rank'] = narrow_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["e-value"].rank("first", ascending=True)
-            narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['e_rank'] == 1]
-            open_target_decoys = open_target_decoys.sample(frac = 1).reset_index(drop=True)
-            open_target_decoys['e_rank'] = open_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["e-value"].rank("first", ascending=True)
-            open_target_decoys = open_target_decoys[open_target_decoys['e_rank'].isin(range(1, tops_open + 1))]
         else:
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['hit_rank'] == 1]
             open_target_decoys = open_target_decoys[open_target_decoys['hit_rank'].isin(range(1, tops_open + 1))]
@@ -1843,12 +1810,9 @@ def main():
         if tide_used == 'tide':
             narrow_target_decoys = narrow_target_decoys.sort_values(by=['file', 'scan', 'xcorr_score'], ascending=False)
             open_target_decoys = open_target_decoys.sort_values(by=['file', 'scan', 'xcorr_score'], ascending=False)
-        elif tide_used == 'comet' and score == 'xcorr_score':
+        elif tide_used == 'comet':
             narrow_target_decoys = narrow_target_decoys.sort_values(by=['scan', 'xcorr_score'], ascending=False)
             open_target_decoys = open_target_decoys.sort_values(by=['scan', 'xcorr_score'], ascending=False)
-        elif tide_used == 'comet' and score == 'e-value':
-            narrow_target_decoys = narrow_target_decoys.sort_values(by=['scan', 'e-value'], ascending=True)
-            open_target_decoys = open_target_decoys.sort_values(by=['scan', 'e-value'], ascending=True)
         else:
             narrow_target_decoys = narrow_target_decoys.sort_values(by=['scannum', 'hyperscore'], ascending=False)
             open_target_decoys = open_target_decoys.sort_values(by=['scannum', 'hyperscore'], ascending=False)
@@ -1862,16 +1826,11 @@ def main():
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
             open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["file", "scan"])["xcorr_score"].rank("first", ascending=False)
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
-        elif tide_used == 'comet' and score == 'xcorr_score':
+        elif tide_used == 'comet':
             narrow_target_decoys['xcorr_rank'] = narrow_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
             open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
-        elif tide_used == 'comet' and score == 'e-value':
-            narrow_target_decoys['e_rank'] = narrow_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["e-value"].rank("first", ascending=True)
-            narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['e_rank'] == 1]
-            open_target_decoys['e_rank'] = open_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["e-value"].rank("first", ascending=True)
-            open_target_decoys = open_target_decoys[open_target_decoys['e_rank'].isin(range(1, tops_open + 1))]
         else:
             narrow_target_decoys['hit_rank'] = narrow_target_decoys.groupby('scannum')["hyperscore"].rank("first", ascending=False)
             open_target_decoys['hit_rank'] = open_target_decoys.groupby('scannum')["hyperscore"].rank("first", ascending=False)
@@ -1947,6 +1906,8 @@ def main():
             sys.exit("Peptide list not provided. \n")
         else:
             peptide_list = pd.read_table(td_list)
+            if 'decoy(s)' in peptide_list.columns: #too handle newest version of tide-index
+                peptide_list.rename(columns = {'decoy(s)':'decoy'}, inplace = True)
     
     #print filtered search results if requested
     if return_filt_search:
@@ -2083,10 +2044,8 @@ def main():
         
         target_decoys_all_sub = target_decoys_all_sub.drop_duplicates(subset = ['sequence'])
         
-        if (tide_used == 'tide') or (score == 'xcorr_score'):
+        if (tide_used == 'tide') or (tide_used == 'comet'):
             rank = 'xcorr_rank'
-        elif (tide_used == 'comet') and (score == 'e-value'):
-            rank = 'e_rank'
         else:
             rank = 'hit_rank'
     
@@ -2109,10 +2068,7 @@ def main():
                 winning_scores = target_decoys_all_sub[score]
                 labels = target_decoys_all_sub['labels']
                 winning_peptides = target_decoys_all_sub['sequence']
-                if score == 'e-value':
-                    rank = target_decoys_all_sub['e_rank']
-                if score == 'xcorr_score':
-                    rank = target_decoys_all_sub['xcorr_rank']
+                rank = target_decoys_all_sub['xcorr_rank']
                 delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
                 database = target_decoys_all_sub['database']
                 scan = target_decoys_all_sub['scan'].astype(str) + ' ' + target_decoys_all_sub['charge'].astype(str) + ' ' + target_decoys_all_sub['spectrum_neutral_mass'].astype(str)
