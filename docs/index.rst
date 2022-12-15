@@ -21,6 +21,6 @@ CONGA is a tool for discovering peptides in mass-spectrometry data with theoreti
 
 Links
 =====
-* Source code: https://github.com/freejstone/open_groupwalk
+* Source code: https://github.com/freejstone/CONGA
 * Paper: To be added
 * :ref:`search`

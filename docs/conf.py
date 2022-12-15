@@ -17,7 +17,7 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'Open Group-walk'
+project = 'CONGA'
 copyright = '2022, Jack Freestone'
 author = 'Jack Freestone'
 
