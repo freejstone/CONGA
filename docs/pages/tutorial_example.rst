@@ -127,18 +127,18 @@ Here we explain what a typical log file looks like from CONGA::
   INFO: Writing peptides at user-specified FDR level to directory. 
   INFO: Elapsed time: 23.28 s
 
-#. (1). CPU information.
-#. (2). Date and time.
-#. (3). Command used.
-#. (4). CONGA checks whether the score specified is found in the search files provided.
-#. (5). CONGA detects what type of search engine was used based off the column names of the search files provided.
-#. (6). CONGA detects whether a separate search or a concantenated search was conducted based off whether it is able to find any decoys in the search files.
-#. (7). CONGA notifies the user that it is about to initiate the first phase of filtering for neighbouring peptides.
-#. (8). CONGA notifies the user that it is about to initiate the second phase of undergoing peptide-level competition.
-#. (9). CONGA notifies the user that it is about to initiate the third phase of partitioning the peptides into groups.
-#. (10). CONGA reports the names of the groups it constructed, the number of decoys and targets in each group, and the ratio of decoys to targets in each group.
-#. (11). CONGA notifies the user that it is about to initiate the fourth phase of applying the group-walk algorithm.
-#. (12). The number of peptides discovered at the 1% FDR level and at the 5% FDR level.
-#. (13). A count of the number of times each scan is responsbile for discovering peptide at the 1% and 5% FDR level. As an example, there are 14611 scans each responsible for discovering 1 peptide, and 286 scans responsible for discovering 2 peptides at the 1% level. Hence the total number of discoveries are 14611 + 2*286 = 15183
+#. CPU information.
+#. Date and time.
+#. Command used.
+#. CONGA checks whether the score specified is found in the search files provided.
+#. CONGA detects what type of search engine was used based off the column names of the search files provided.
+#. CONGA detects whether a separate search or a concantenated search was conducted based off whether it is able to find any decoys in the search files.
+#. CONGA notifies the user that it is about to initiate the first phase of filtering for neighbouring peptides.
+#. CONGA notifies the user that it is about to initiate the second phase of undergoing peptide-level competition.
+#. CONGA notifies the user that it is about to initiate the third phase of partitioning the peptides into groups.
+#. CONGA reports the names of the groups it constructed, the number of decoys and targets in each group, and the ratio of decoys to targets in each group.
+#. CONGA notifies the user that it is about to initiate the fourth phase of applying the group-walk algorithm.
+#. The number of peptides discovered at the 1% FDR level and at the 5% FDR level.
+#. A count of the number of times each scan is responsbile for discovering peptide at the 1% and 5% FDR level. As an example, there are 14611 scans each responsible for discovering 1 peptide, and 286 scans responsible for discovering 2 peptides at the 1% level. Hence the total number of discoveries are 14611 + 2*286 = 15183
 
 
