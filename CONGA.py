@@ -24,7 +24,7 @@ import platform
 from matplotlib import pyplot as plt
 
 
-USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
+USAGE = """USAGE: CONGA.py [options] <narrow> <wide> <matching>
 
   This script implements the CONGA algorithm, including the
   creation of groups and the filtering procedure that eliminates
@@ -46,7 +46,7 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                           Default = './'.
                           
     --file_root <string>  The file prefix of the output files
-                          Default = 'open_group_walk'.
+                          Default = 'conga'.
 
     --FDR_threshold <value>     A user-specified threshold for which the reported
                                 peptides will have FDR below this threshold.
@@ -93,11 +93,6 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                                     differences between the sample
                                     and theoretical spectra.
                                     Default = 1.0005079/4.
-                                    
-    --adaptive <T|F>      To determine whether groups should be chosen
-                          using the Kolmogorov-Smirnov test or if a
-                          fixed procedure should be used.
-                          Default = T.
                           
     --print_chimera <T|F>          To determine whether we print the number
                                    of scans that have more than 1 peptide
@@ -119,11 +114,6 @@ USAGE = """USAGE: Groupwalk.py [options] <narrow> <wide> <matching>
                                    used to determine the minimum size of
                                    each group. See option --K.
                                    Default = 2.
-                                   
-    --n_top_groups <integer>       The number of top mass differences used
-                                   when constructing the groups. Active
-                                   only if adaptive = False.
-                                   Default = 4.
     
     --neighbour_remove <T|F>       If true, for each scan, we successively
                                    move down the list of PSMs associated with
@@ -1356,7 +1346,6 @@ def main():
     tops_gw = 2
     tops_open = 5
     score = 'tailor_score'
-    #random_h2h = True
     account_mods = True
     return_extra_mods = False
     precursor_bin_width = 1.0005079/4
@@ -1373,7 +1362,7 @@ def main():
     n_processes = 1
     return_frontier = False
     output_dir = './'
-    file_root = 'open_group_walk'
+    file_root = 'conga'
     static_mods = {'C':57.02146}
     return_mass_mod_hist = False
     dcy_prefix = 'decoy_'
@@ -1424,15 +1413,6 @@ def main():
         elif (next_arg == "--precursor_bin_width"):
             precursor_bin_width = float(sys.argv[0])  
             sys.argv = sys.argv[1:]
-        elif (next_arg == "--adaptive"):
-            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
-                adaptive = True
-            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
-                adaptive = False
-            else:
-                sys.stderr.write("Invalid argument for --adaptive")
-                sys.exit(1)
-            sys.argv = sys.argv[1:]
         elif (next_arg == "--print_chimera"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
                 print_chimera = True
@@ -1456,9 +1436,6 @@ def main():
             sys.argv = sys.argv[1:]
         elif (next_arg == "--min_group_size"):
             min_group_size = int(sys.argv[0])  
-            sys.argv = sys.argv[1:]
-        elif (next_arg == "--n_top_groups"):
-            n_top_groups = int(sys.argv[0])  
             sys.argv = sys.argv[1:]
         elif (next_arg == "--neighbour_remove"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
@@ -1546,12 +1523,11 @@ def main():
         random.seed(seed)
     
     #check if output directory exists, if not create and store log file there.
-    if output_dir != './':
-        if os.path.isdir(output_dir):
-            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
-        else:
-            os.mkdir(output_dir)
-            logging.basicConfig(filename=output_dir + "/" + file_root  + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+    if os.path.isdir(output_dir):
+        logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+    else:
+        os.mkdir(output_dir)
+        logging.basicConfig(filename=output_dir + "/" + file_root  + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
     
     #print CPU info
     logging.info('CPU: ' + str(platform.platform()))

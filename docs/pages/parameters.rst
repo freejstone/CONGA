@@ -2,7 +2,7 @@
 Parameters
 """""""""""
 
-Groupwalk.py supports the following input parameters:
+CONGA.py supports the following input parameters:
 
 -------------------
 Neighbor filtration
@@ -18,18 +18,16 @@ Peptide-level competition
 -------------------------
 
 * ``--score <string>``: Either 'tailor_score', 'xcorr_score', 'e-value' or 'hyperscore'. The score that will be used in the peptide-level competition and subsequent Group construction and Group-walk algorithm. If 'tailor_score', it is assumed the search files are derived from Tide. If 'xcorr_score', either Tide or Comet is assumed to be used. If 'e-value', Comet is assumed. If 'hyperscore' it is assumed the search files are derived from MS-Fragger. Default = 'tailor_score'.
-* ``--account_mods <T|F>``: To determine whether the group-walk algorithm uses the best PSM among the equivalent classes of peptides which are equal up to variable modification, or not. Default = T.
+* ``--account_mods <T|F>``: To determine whether CONGA uses the best PSM among the equivalent classes of peptides which are equal up to variable modification, or not. Default = T.
 
 ------------------
 Group construction
 ------------------
 
 * ``--precursor_bin_width <value>``: To determine the size of the bins used to discretize the mass-differences between the sample and theoretical spectra. Default = 1.00050794.
-* ``--adaptive <T|F>``: To determine whether groups should be chosen using the Kolmogorov-Smirnov test or if a fixed procedure should be used. Default = T.
 * ``--min_group_size <integer>``: The number of multiples of K that is used to determine the minimum size of each group. See option ``--K``. Default = 2.
 * ``--tops_gw <integer>``: The number of top PSMs for each scan in the open search that will be used by group-walk. Default = 2.
 * ``--group_thresh <value>``: The p-value threshold used to determine whether groups are merged or kept separate in the KS test. Default = 0.01.
-* ``--n_top_groups <integer>``: The number of top mass differences used when constructing the groups. Active only if ``--adaptive F``. Default = 4.
 
 --------------------
 Group-walk algorithm
@@ -49,12 +47,12 @@ Input and output
 ----------------
 
 * ``--output_dir <string>``: The file-path of the output. Default = './'.
-* ``--file_root <string>``: The file prefix of the output files. Default = 'open_group_walk'.
+* ``--file_root <string>``: The file prefix of the output files. Default = 'conga'.
 * ``--print_chimera <T|F>``: To determine whether we print the number of scans that have more than 1 peptide discovered at the 1% and 5% FDR level to the log file. Default = T.
 * ``--print_group_pi0 <T|F>``: To determine whether the group-level proportion of pi_0 is printed to the log file. Default = T.
 * ``--return_extra_mods <T|F>``: All top 1 PSM-ranked target peptides that are equal to a discovered peptide up to variable modification will be included in the file output. Default = F.
 * ``--return_decoys <T|F>``: Also report decoys used to estimate the number of false discoveries. Default = F.
-* ``--return_frontier <T|F>``: The sequence of indices describing the positions of the frontier used by Groupwalk is returned as a .txt file to the output directory. Default = F.
+* ``--return_frontier <T|F>``: The sequence of indices describing the positions of the frontier used by the group-walk algorithm is returned as a .txt file to the output directory. Default = F.
 * ``--static_mods <string>``: Of the form X:[+-]A where X is the amino acid, or rather "cterm" or "nterm" if it is a modification on the C-terminal or N-terminal. A is the absolute mass shift in Daltons. [+-] indicates whether the mass shift is positive or negative. C+57.02146 is always included by default. Variable modifications do not need specification (they are accounted for via the search files). List mods in comma separated format, e.g. nterm:10,cterm:-20,L:50. Default = None.
 * ``--return_mass_mod_hist <T|F>``: To determine whether a histogram of unaccounted-for mass-modifications is written to the directory. Default = T.
 * ``--dcy_prefix <string>``: The prefix used for the decoy proteins. Default = 'decoy\_'.

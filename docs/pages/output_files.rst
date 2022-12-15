@@ -2,15 +2,15 @@
 Output files
 """"""""""""
 
-Open Group-walk returns files with names of the form ``file_root.content.ext``, where ``file_root`` is provided by the user, ``content`` indicates the contents of the file, and ``ext`` indicates the file type.
+CONGA returns files with names of the form ``file_root.content.ext``, where ``file_root`` is provided by the user, ``content`` indicates the contents of the file, and ``ext`` indicates the file type.
 The file ``file_root.target.txt`` is always returned, whereas the others are optional.
 
-* ``file_root.target.txt``: A list of target peptides discovered by Open group-walk at a user-specified FDR threshold.
+* ``file_root.target.txt``: A list of target peptides discovered by CONGAs at a user-specified FDR threshold.
 * ``file_root.decoy.txt``: A list of decoy peptides used to estimate the number of false discoveries at a user-specified FDR threshold. Returned if ``--return_decoys T``.
 * ``file_root.unaccounted-mass-mods.pdf``: A histogram of the unaccounted-for mass-modifications in ``file_root.target.txt``. Returned if ``--return_mass_mod_hist T``.
 * ``file_root.frontier.txt``: The complete sequence of positions of the frontier vector used by group-walk. Returned if ``--return_frontier T``.
 
-The column names found in ``file_root.target.txt`` are as follows:.
+The column names found in ``file_root.target.txt`` are as follows.
 
 * ``peptide``: The sequence of the reported peptide.
 * ``scan``: The scan number responsible for identifying the reported peptide.
