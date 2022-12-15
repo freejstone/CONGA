@@ -88,7 +88,7 @@ Like Comet, the score needs to be specified, because the default is Tailor score
 Interpreting the log file
 =========================
 
-Here we explain what a typical log file looks like from CONGA.
+Here we explain what a typical log file looks like from CONGA::
 
   INFO: CPU: macOS-10.16-x86_64-i386-64bit (1)
   INFO: 2022-12-15 13:00:40.486262 (2)
