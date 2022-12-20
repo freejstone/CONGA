@@ -580,7 +580,7 @@ def filter_scan_subset(df, q, task_number, return_dict, tide_used, score, thresh
     if tide_used == 'tide':
         sys.stderr.write("Starting Process " + str(task_number) + " \n")
         logging.info("Starting Process " + str(task_number))
-        results = df.groupby(['file', 'scan']).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+        results = df.groupby(['file', 'scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
         results = results.sort_index(ascending = False)
         results = results.apply(pd.Series).stack().reset_index()
         return_dict[task_number] = results[0]
@@ -605,7 +605,7 @@ def listener(q, list_of_df, tide_used):
     constantly checks to see if the queue q has been updated
     '''
     if tide_used == 'tide':
-        pbar = tqdm(total = sum([len(j.groupby(['scan', "charge", "spectrum_neutral_mass"])) for j in list_of_df]))
+        pbar = tqdm(total = sum([len(j.groupby(['file', 'scan', "charge", "spectrum_neutral_mass"])) for j in list_of_df]))
         for item in iter(q.get, None):
             pbar.update(item)
     elif tide_used == 'comet':
@@ -659,7 +659,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
     #indeed it makes sense to use xcorr_score over tailor score, as tailor_score uses candidate PSMs to 
     #normalise the xcorr_score - this differs from narrow to open. 
     if tide_used == 'tide':
-        target_decoys_all = target_decoys_all.sort_values(by=['file', 'scan', 'xcorr_score'], ascending = False)
+        target_decoys_all = target_decoys_all.sort_values(by=['file', 'scan', 'charge', 'spectrum_neutral_mass', 'xcorr_score'], ascending = False)
     elif tide_used == 'comet':
         target_decoys_all = target_decoys_all.sort_values(by=['scan', "charge", "spectrum_neutral_mass", 'xcorr_score'], ascending = False)
     else:
@@ -677,7 +677,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
     if n_processes == 1:
         tqdm.pandas()
         if tide_used == 'tide':
-            results = target_decoys_all.groupby(['file', 'scan']).progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods)) #apply filtering by experimental scan
+            results = target_decoys_all.groupby(['file', 'scan', 'charge', 'spectrum_neutral_mass']).progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods)) #apply filtering by experimental scan
         elif tide_used == 'comet':
             results = target_decoys_all.groupby(['scan', "charge", "spectrum_neutral_mass"]).progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods)) #apply filtering by experimental scan
         else:
@@ -873,9 +873,9 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
             #randomly shuffle order, so that ties between targets and decoys are broken
             target_decoys_final = target_decoys_final.sample(frac = 1).reset_index(drop=True)
         
-        target_decoys_final['scan_plus_seq'] = target_decoys_final['file'].astype(str) + target_decoys_final['scan'].astype(str) + ' ' + target_decoys_final['sequence']
+        target_decoys_final['scan_plus_seq'] = target_decoys_final['scan'].astype(str) + ' ' + target_decoys_final['charge'].astype(str) + ' ' + target_decoys_final['spectrum_neutral_mass'].astype(str) + ' ' + target_decoys_final['sequence']
         narrow_target_decoys.reset_index(drop = True, inplace = True)
-        narrow_target_decoys['scan_plus_seq'] = narrow_target_decoys['file'].astype(str) + narrow_target_decoys['scan'].astype(str) + ' ' + narrow_target_decoys['sequence']
+        narrow_target_decoys['scan_plus_seq'] = narrow_target_decoys['scan'].astype(str) + ' ' + narrow_target_decoys['charge'].astype(str) + ' ' + narrow_target_decoys['spectrum_neutral_mass'].astype(str) + ' ' + narrow_target_decoys['sequence']
         
         #translating into an iterable
         unique_scan_seq_td_narrow = set(narrow_target_decoys['scan_plus_seq'])
@@ -916,7 +916,9 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         database = target_decoys_final['database']
         scan = target_decoys_final['scan']
         file = target_decoys_final['file']
-        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'file'])
+        charge = target_decoys_final['charge']
+        spectrum_neutral_mass = target_decoys_final['spectrum_neutral_mass']
+        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'file'])
     elif tide_used == 'comet':
         #combine targets/decoys
         target_decoys_final = pd.concat([targets, decoys])
@@ -1041,7 +1043,9 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         delta_mass = target_decoys_final['precursor_neutral_mass'] - target_decoys_final['calc_neutral_pep_mass']
         database = target_decoys_final['database']
         scan = target_decoys_final['scannum']
-        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan'])
+        charge = target_decoys_final['charge']
+        spectrum_neutral_mass = target_decoys_final['spectrum_neutral_mass']
+        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan'])
         
     df = df.sample(frac = 1)
     
@@ -1798,9 +1802,9 @@ def main():
         
         #create a new ranking in the concantenated search and take the top 1 in narrow and top 'tops_open' in open.
         if tide_used == 'tide':
-            narrow_target_decoys['xcorr_rank'] = narrow_target_decoys.groupby(["file", "scan"])["xcorr_score"].rank("first", ascending=False)
+            narrow_target_decoys['xcorr_rank'] = narrow_target_decoys.groupby(["file", "scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['xcorr_rank'] == 1]
-            open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["file", "scan"])["xcorr_score"].rank("first", ascending=False)
+            open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["file", "scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
         elif tide_used == 'comet':
             narrow_target_decoys['xcorr_rank'] = narrow_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
@@ -1925,7 +1929,7 @@ def main():
     if print_chimera:
         if tide_used == 'tide':
             if power_1 > 0:
-                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan']]).value_counts().value_counts()
+                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
                 scan_mult1 = pd.DataFrame(scan_mult1)
                 scan_mult1.columns = ['Count']
                 scan_mult1.index.names = ['Scan multiplicity:']
@@ -1935,7 +1939,7 @@ def main():
                 sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
                 sys.stderr.write(scan_mult1.to_string() + "\n")
             if power_5 > 0:
-                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan']]).value_counts().value_counts()
+                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
                 scan_mult5 = pd.DataFrame(scan_mult5)
                 scan_mult5.columns = ['Count']
                 scan_mult5.index.names = ['Scan multiplicity:']
@@ -2038,7 +2042,9 @@ def main():
                 database = target_decoys_all_sub['database']
                 scan = target_decoys_all_sub['scan']
                 file = target_decoys_all_sub['file']
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'file'])
+                charge = target_decoys_all_sub['charge']
+                spectrum_neutral_mass = target_decoys_all_sub['spectrum_neutral_mass']
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'file'])
                 
             elif tide_used == 'comet':
                 winning_scores = target_decoys_all_sub[score]
