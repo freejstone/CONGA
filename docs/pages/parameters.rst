@@ -40,7 +40,7 @@ Group-walk algorithm
 CPU processes
 -------------
 
-* ``--n_processes <integer>``: The number of processes used in the filtering process. Default = 1.
+* ``--n_processes <integer>``: The number of processes used in the filtering process. This is very valuable as the filtering process is typically the longest part of CONGA. Default = 1.
 
 ----------------
 Input and output
