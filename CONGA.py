@@ -1336,8 +1336,43 @@ def del_protein(protein, dcy_prefix):
     select_protein = (True in check_protein) and (False in check_protein)
     
     return(select_protein)
-
-
+###############################################################################
+aa_table = pd.DataFrame({
+    71.037114: 'A',
+   103.009184: 'C',
+   115.026943: 'D',
+   129.042593: 'E',
+   147.068414: 'F',
+    57.021464: 'G',
+   137.058912: 'H',
+   113.084064: 'I, L',
+   128.094963: 'K',
+   131.040485: 'M',
+   114.042927: 'N',
+    97.052764: 'P',
+   128.058578: 'Q',
+   156.101111: 'R',
+    87.032028: 'S',
+   101.047668: 'T',
+    99.068414: 'V',
+   186.079313: 'W',
+   163.063329: 'Y',
+    }.items(), columns = ['mass', 'aa'])
+###############################################################################
+def get_amino_acid_to_warn(mass_diff):
+    abs_mass_diff = abs(mass_diff)
+    diff_diff = abs_mass_diff - aa_table.mass
+    get_indices = aa_table.mass[abs(diff_diff) <= 0.2].index
+    if len(get_indices) > 0:
+        get_index = get_indices[0]
+        get_aa = aa_table.aa[get_index]
+        if abs_mass_diff > 0:
+            message = 'Possible addition of ' + get_aa
+        else:
+            message = 'Possible loss of ' + get_aa
+        return message
+    else:
+        return ''
 ###############################################################################
 def main():
     global USAGE
@@ -2111,7 +2146,19 @@ def main():
     else:
         logging.info("Writing peptides at user-specified FDR level to directory.")
         sys.stderr.write("Writing peptides at user-specified FDR level to directory. \n")
-        
+    
+    for aa in static_mods.keys():
+        if aa == 'I' or aa == 'L': #Problem if someone uses two different static mods for I and L
+            get_indices = aa_table.mass[aa_table.aa == 'I, L'].index
+            if len(get_indices) > 0:
+                aa_table.mass.at[get_indices[0]] += static_mods[aa]
+        else:
+            get_indices = aa_table.mass[aa_table.aa == aa].index
+            if len(get_indices) > 0:
+                aa_table.mass.at[get_indices[0]] += static_mods[aa]
+    
+    df['flag'] = df.delta_mass.apply(get_amino_acid_to_warn)
+    
     if output_dir != './':
         if os.path.isdir(output_dir):
             df.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')

@@ -18,4 +18,5 @@ The column names found in ``file_root.target.txt`` are as follows.
 * ``delta_mass``: The mass difference (in Daltons) between the scan and the peptide.
 * ``rank``: The rank of the PSM in the search file (either the narrow- or open-search file) it was identified from.
 * ``search_file``: Indication of whether the PSM was taken from the narrow- or open-search file.
+* ``flag``: Flags whether the peptide discovered has a ``delta_mass`` value that coincides with a loss or gain of an amino acid.
 * ``originally_discovered``: This column is made available when the option ``--return_extra_mods T`` is used. In this case, a peptide discovered at an FDR threshold will also have their subsequent variants (other variable modifications) of this peptide reported, so long as these variants are identified by a top 1 peptide-spectrum match (top 1 PSM).
