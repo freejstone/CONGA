@@ -918,7 +918,8 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         file = target_decoys_final['file']
         charge = target_decoys_final['charge']
         spectrum_neutral_mass = target_decoys_final['spectrum_neutral_mass']
-        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'file'])
+        flanking_aa = target_decoys_final['flanking_aa']
+        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'file'])
     elif tide_used == 'comet':
         #combine targets/decoys
         target_decoys_final = pd.concat([targets, decoys])
@@ -1359,17 +1360,40 @@ aa_table = pd.DataFrame({
    163.063329: 'Y',
     }.items(), columns = ['mass', 'aa'])
 ###############################################################################
-def get_amino_acid_to_warn(mass_diff):
+def get_amino_acid_to_warn(df):
+    '''
+    Parameters
+    ----------
+    df : Pandas DataFrame
+        Data frame containing delta masses, discovered peptides, and the flanking aa
+
+    Returns
+    -------
+    A string warning the user that some of the discovered mass-modifications coincide with the
+    addition or loss of amino acids -- hence potentially biologically irrelevant PTMs
+
+    '''
+    mass_diff = df.delta_mass
+    peptide = df.peptide
+    flanking = df.flanking_aa
     abs_mass_diff = abs(mass_diff)
     diff_diff = abs_mass_diff - aa_table.mass
     get_indices = aa_table.mass[abs(diff_diff) <= 0.2].index
     if len(get_indices) > 0:
         get_index = get_indices[0]
         get_aa = aa_table.aa[get_index]
-        if abs_mass_diff > 0:
-            message = 'Possible addition of ' + get_aa
+        if mass_diff > 0:
+            if (get_aa != 'I, L') and (get_aa in flanking):
+                message = 'Possible addition of ' + get_aa
+            elif (get_aa == 'I, L') and ('I' in flanking or 'L' in flanking):
+                message = 'Possible addition of ' + get_aa
+            else:
+                message = ''
         else:
-            message = 'Possible loss of ' + get_aa
+            if (peptide[0] in get_aa) or (peptide[len(peptide) - 1] in get_aa):
+                message = 'Possible loss of ' + get_aa
+            else:
+                message = ''
         return message
     else:
         return ''
@@ -1939,14 +1963,15 @@ def main():
     #create groups
     df = create_groups(target_decoys_all, narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
     
-    #e-values score things in reverse
+    #e-values score things in reverse so reverse this for groupwalk
     if tide_used == 'comet' and score == 'e-value':
         df['winning_scores'] = -df['winning_scores']
+        
     #apply group-walk
     results = group_walk(list(df['winning_scores']), list(df['labels']), list(df['all_group_ids']), K, return_frontier, correction)
     
     df['q_vals'] = results[0]
-    df = df.sort_values(by = ['q_vals', 'winning_scores'], ascending = [False, True])
+    df = df.sort_values(by = ['q_vals', 'winning_scores'], ascending = [True, False])
     df = df.drop('bins', axis = 1)
     
     #report power for 1 and 5% FDR (we do this before the reporting of extra variable modifications)
@@ -2079,7 +2104,8 @@ def main():
                 file = target_decoys_all_sub['file']
                 charge = target_decoys_all_sub['charge']
                 spectrum_neutral_mass = target_decoys_all_sub['spectrum_neutral_mass']
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'file'])
+                flanking_aa = target_decoys_all_sub['flanking_aa']
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'file'])
                 
             elif tide_used == 'comet':
                 winning_scores = target_decoys_all_sub[score]
@@ -2157,7 +2183,11 @@ def main():
             if len(get_indices) > 0:
                 aa_table.mass.at[get_indices[0]] += static_mods[aa]
     
-    df['flag'] = df.delta_mass.apply(get_amino_acid_to_warn)
+    df['flag'] = df.apply(get_amino_acid_to_warn, axis = 1)
+    
+    #dropping flanking_aa
+    if tide_used == 'tide':
+        df.pop('flanking_aa')
     
     if output_dir != './':
         if os.path.isdir(output_dir):
