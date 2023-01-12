@@ -721,7 +721,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
     return target_decoys_all
 ###############################################################################
 
-def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix = 'decoy_', K = 40, tops = 2, score = 'tailor', account_mods = True, any_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = 'tide', print_group_pi0 = True):
+def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix = 'decoy_', K = 40, tops = 2, score = 'tailor_score', account_mods = True, any_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = 'tide', print_group_pi0 = True):
     '''
     Parameters
     ----------
