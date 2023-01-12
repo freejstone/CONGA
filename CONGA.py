@@ -1807,9 +1807,9 @@ def main():
             
         check_1 = any(narrow_2['protein_id'].str.contains(dcy_prefix))
         check_2 = any(open_2['protein_id'].str.contains(dcy_prefix))
-        if (not check_1) or (not check_2):
-            logging.info('No decoys were found in one of the decoy search files.')
-            sys.exit('No decoys were found in one of the decoy search files. \n')
+        if (not check_1):
+            logging.info('No decoys were found in %s.' % search_file_narrow_2)
+            sys.exit('No decoys were found in %s. \n' % search_file_narrow_2)
   
         #Creating original_target_sequence column for target files too, so that they exist when we concatenate our target and decoy search files
         if tide_used == 'tide':
@@ -2182,11 +2182,10 @@ def main():
             get_indices = aa_table.mass[aa_table.aa == aa].index
             if len(get_indices) > 0:
                 aa_table.mass.at[get_indices[0]] += static_mods[aa]
-    
-    df['flag'] = df.apply(get_amino_acid_to_warn, axis = 1)
-    
+
     #dropping flanking_aa
     if tide_used == 'tide':
+        df['flag'] = df.apply(get_amino_acid_to_warn, axis = 1)
         df.pop('flanking_aa')
     
     if output_dir != './':
