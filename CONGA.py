@@ -1045,7 +1045,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         database = target_decoys_final['database']
         scan = target_decoys_final['scannum']
         charge = target_decoys_final['charge']
-        spectrum_neutral_mass = target_decoys_final['spectrum_neutral_mass']
+        spectrum_neutral_mass = target_decoys_final['precursor_neutral_mass']
         df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan'])
         
     df = df.sample(frac = 1)
