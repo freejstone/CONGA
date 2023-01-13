@@ -1,4 +1,4 @@
-FROM python:3
+FROM python:3.9
 LABEL maintainer="Michael Riffle <mriffle@uw.edu>"
 
 ADD entrypoint.sh /usr/local/bin/entrypoint.sh
