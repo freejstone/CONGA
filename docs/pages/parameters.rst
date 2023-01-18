@@ -56,4 +56,5 @@ Input and output
 * ``--static_mods <string>``: Of the form X:[+-]A where X is the amino acid, or rather "cterm" or "nterm" if it is a modification on the C-terminal or N-terminal of the peptide. A is the absolute mass shift in Daltons. [+-] indicates whether the mass shift is positive or negative. C+57.02146 is always included by default. Variable modifications do not need specification (they are accounted for via the search files). List mods in comma separated format, e.g. nterm:10,cterm:-20,L:50. Default = None.
 * ``--return_mass_mod_hist <T|F>``: To determine whether a histogram of unaccounted-for mass-modifications is written to the directory. Default = T.
 * ``--dcy_prefix <string>``: The prefix used for the decoy proteins. Default = 'decoy\_'.
+* ``--overwrite <T|F>``: If a log file with the same file root is detected in the output directory, CONGA will not overwrite the files unless this option is set to T. Default = F.
 * ``--seed <int>``: Set random seed. Default = None.

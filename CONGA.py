@@ -170,6 +170,10 @@ USAGE = """USAGE: CONGA.py [options] <narrow> <wide> <matching>
                                 number of false discoveries. 
                                 Default = F. 
                                 
+    --overwrite <T|F>     Gives option to overwrite existing files in
+                          directory.
+                          Default = F.
+                                
     --seed <int>          Set random seed.
                           Default = None.
             
@@ -1253,7 +1257,7 @@ def add_modification_to_amino_acid(df, static_mods):
             if aa_list[site] in static_mods:
                 if abs(static_mods[aa_list[site]] - float(mass)) <= 10**(-4):
                     continue
-            aa_list[site] = aa_list[site] + '[' + str(round(float(mass), 2)) + ']'
+            aa_list[site] = aa_list[site] + '[' + str(round(float(mass), 4)) + ']'
             
         return(aa_list)
 
@@ -1424,12 +1428,13 @@ def main():
     correction = 1
     n_processes = 1
     return_frontier = False
-    output_dir = './'
+    output_dir = '.'
     file_root = 'conga'
     static_mods = {'C':57.02146}
     return_mass_mod_hist = False
     dcy_prefix = 'decoy_'
     return_decoys = False
+    overwrite = False
     seed = None
     
     command_line = ' '.join(sys.argv)
@@ -1563,6 +1568,15 @@ def main():
                 sys.stderr.write("Invalid argument for --return_decoys")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
+        elif (next_arg == "--overwrite"):
+            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
+                overwrite = True
+            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
+                overwrite = False
+            else:
+                sys.stderr.write("Invalid argument for --overwrite")
+                sys.exit(1)
+            sys.argv = sys.argv[1:]
         elif (next_arg == '--seed'):
             seed = int(sys.argv[0])
             sys.argv = sys.argv[1:]
@@ -1587,7 +1601,14 @@ def main():
     
     #check if output directory exists, if not create and store log file there.
     if os.path.isdir(output_dir):
-        logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+        if os.path.exists(path = output_dir + "/" + file_root + ".log.txt") and overwrite:
+            os.remove(output_dir + "/" + file_root + ".log.txt")
+            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+        elif os.path.exists(path = output_dir + "/" + file_root + ".log.txt") and not overwrite:
+            log_file = output_dir + "/" + file_root + ".log.txt"
+            sys.exit("The file %s already exists and cannot be overwritten. Use --overwrite T to replace or choose a different output file name. \n" %(log_file))
+        else:
+            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
     else:
         os.mkdir(output_dir)
         logging.basicConfig(filename=output_dir + "/" + file_root  + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
