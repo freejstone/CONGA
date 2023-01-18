@@ -977,8 +977,10 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         rank = target_decoys_final['xcorr_rank']
         delta_mass = target_decoys_final['spectrum_neutral_mass'] - target_decoys_final['peptide_mass']
         database = target_decoys_final['database']
-        scan = target_decoys_final['scan'].astype(str) + ' ' + target_decoys_final['charge'].astype(str) + ' ' + target_decoys_final['spectrum_neutral_mass'].astype(str)
-        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan_charge_sp_neutral_mass'])
+        scan = target_decoys_final['scan']
+        charge = target_decoys_final['charge']
+        spectrum_neutral_mass = target_decoys_final['spectrum_neutral_mass']
+        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan', 'charge', 'spectrum_neutral_mass'])
  
     
     else:
@@ -2031,7 +2033,7 @@ def main():
                 sys.stderr.write(scan_mult5.to_string() + "\n")
         elif tide_used == 'comet':
             if power_1 > 0:
-                scan_mult1 = df['scan_charge_sp_neutral_mass'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
                 scan_mult1 = pd.DataFrame(scan_mult1)
                 scan_mult1.columns = ['Count']
                 scan_mult1.index.names = ['Scan multiplicity:']
@@ -2041,7 +2043,7 @@ def main():
                 sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
                 sys.stderr.write(scan_mult1.to_string() + "\n")
             if power_5 > 0:
-                scan_mult5 = df['scan_charge_sp_neutral_mass'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].value_counts().value_counts()
+                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
                 scan_mult5 = pd.DataFrame(scan_mult5)
                 scan_mult5.columns = ['Count']
                 scan_mult5.index.names = ['Scan multiplicity:']
@@ -2135,8 +2137,10 @@ def main():
                 rank = target_decoys_all_sub['xcorr_rank']
                 delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
                 database = target_decoys_all_sub['database']
-                scan = target_decoys_all_sub['scan'].astype(str) + ' ' + target_decoys_all_sub['charge'].astype(str) + ' ' + target_decoys_all_sub['spectrum_neutral_mass'].astype(str)
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan_charge_sp_neutral_mass'])
+                scan = target_decoys_all_sub['scan']
+                charge = target_decoys_all_sub['charge']
+                spectrum_neutral_mass = target_decoys_all_sub['spectrum_neutral_mass']
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan'])
             
             elif tide_used == 'ms_fragger':
                 winning_scores = target_decoys_all_sub['hyperscore']
