@@ -1404,6 +1404,26 @@ def get_amino_acid_to_warn(df):
     else:
         return ''
 ###############################################################################
+def get_modification_info(peptide):
+    '''
+    Parameters
+    ----------
+    peptide : str
+        String containing peptide sequence with variable modifications
+
+    Returns
+    -------
+    A string containing the modification info.
+
+    '''
+    peptide_split = re.findall(r"[^\W\d_]\[\d+.\d+\]|[^\W\d_]", peptide)
+    positions = [any(char.isdigit() for char in inputString) for inputString in peptide_split]
+    positions = [str(y) for y in np.where(positions)[0]]
+    mass_mod = re.findall(r"\[\d+.\d+\]", peptide)
+    modification_info = [''.join(x) for x in zip(positions, mass_mod)]
+    modification_info = ','.join(modification_info)
+    return(modification_info)
+###############################################################################
 def main():
     global USAGE
     
@@ -2212,6 +2232,8 @@ def main():
     if tide_used == 'tide':
         df['flag'] = df.apply(get_amino_acid_to_warn, axis = 1)
         df.pop('flanking_aa')
+    
+    df['modification_info'] = df['peptide'].apply(get_modification_info)
     
     if output_dir != './':
         if os.path.isdir(output_dir):
