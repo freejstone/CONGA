@@ -1259,7 +1259,7 @@ def add_modification_to_amino_acid(df, static_mods):
             if aa_list[site] in static_mods:
                 if abs(static_mods[aa_list[site]] - float(mass)) <= 10**(-4):
                     continue
-            aa_list[site] = aa_list[site] + '[' + str(round(float(mass), 4)) + ']'
+            aa_list[site] = aa_list[site] + '[' + str(round(float(mass), 6)) + ']'
             
         return(aa_list)
 
@@ -1418,7 +1418,7 @@ def get_modification_info(peptide):
     '''
     peptide_split = re.findall(r"[^\W\d_]\[\d+.\d+\]|[^\W\d_]", peptide)
     positions = [any(char.isdigit() for char in inputString) for inputString in peptide_split]
-    positions = [str(y) for y in np.where(positions)[0]]
+    positions = [str(y) for y in (np.where(positions)[0] + 1)]
     mass_mod = re.findall(r"\[\d+.\d+\]", peptide)
     modification_info = [''.join(x) for x in zip(positions, mass_mod)]
     modification_info = ','.join(modification_info)
