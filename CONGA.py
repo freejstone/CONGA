@@ -304,7 +304,10 @@ def parse_mods(pepseq_with_mods, static_mods):
             mod_mass = float(pepseq_with_mods[modpepseq_position + 1:end_pos])
 
             # Store a modification associated with the current position.
-            modifications[aaseq_position] = mod_mass
+            if (modifications[aaseq_position] != 0.0): #To handle when comet has a mass mod due to n- or c-term AND a variable mod on the same site. MSFragger/Tide do not appear to have this doubling up issue!
+                modifications[aaseq_position] += mod_mass
+            else:
+                modifications[aaseq_position] = mod_mass
             modpepseq_position = end_pos + 1
         else:
             sys.stderr.write("Invalid character (%s) at position %d.\n"
@@ -1287,7 +1290,7 @@ def create_peptides_with_mod(unmodified_peptides, modification_info, static_mods
     modified_peptides = modified_peptides.apply(''.join)
     return(modified_peptides)
 ###############################################################################
-def reverse_sequence(sequences):
+def reverse_sequence(sequence, modifications):
     '''
     Parameters
     ----------
@@ -1298,9 +1301,23 @@ def reverse_sequence(sequences):
     -------
     Recovers target sequences.
     '''
-    results = sequences.str.findall('[a-zA-Z]\\[\d+\.\d+\\]|[a-zA-Z]\\[\d+\\]|[a-zA-Z]')
-    results = results.apply(lambda x: x[-2::-1] + [x[-1]])
-    results = results.apply(''.join)
+    results = re.findall('[a-zA-Z]\\[\d+\.\d+\\]\\[\d+\.\d+\\]|[a-zA-Z]\\[\d+\.\d+\\]|[a-zA-Z]\\[\d+\\]|[a-zA-Z]', sequence)
+    if '_N' in modifications:
+        n_term_mass_mod_list = re.findall(r"(\d+.\d+)_N", modifications)
+        if len(n_term_mass_mod_list) > 0:
+            n_term_mass_mod = float(n_term_mass_mod_list[0])
+            masses_on_n_term = re.findall(r"(\d+.\d+)", results[0])
+            calc_n_term_mass_mod_list = [float(m) for m in masses_on_n_term if abs(float(m) - n_term_mass_mod) <= 10e-3]
+            if len(calc_n_term_mass_mod_list) > 0:
+                calc_n_term_mass_mod = str(calc_n_term_mass_mod_list[0])
+                results[0] = results[0].replace('[' + calc_n_term_mass_mod + ']', '', 1)
+    
+    results = results[-2::-1] + [results[-1]]
+    
+    if '_N' in modifications:
+        results[0] = results[0] + '[' + calc_n_term_mass_mod + ']'
+    
+    results = ''.join(results)
     return(results)
 ###############################################################################
 def check_n_term(sequences):
@@ -1416,10 +1433,10 @@ def get_modification_info(peptide):
     A string containing the modification info.
 
     '''
-    peptide_split = re.findall(r"[^\W\d_]\[\d+.\d+\]|[^\W\d_]", peptide)
+    peptide_split = re.findall(r"[^\W\d_]\[\d+.\d+\]\[\d+.\d+\]|[^\W\d_]\[\d+.\d+\]|[^\W\d_]", peptide)
     positions = [any(char.isdigit() for char in inputString) for inputString in peptide_split]
     positions = [str(y) for y in (np.where(positions)[0] + 1)]
-    mass_mod = re.findall(r"\[\d+.\d+\]", peptide)
+    mass_mod = re.findall(r"\[\d+.\d+\]\[\d+.\d+\]|\[\d+.\d+\]", peptide)
     modification_info = [''.join(x) for x in zip(positions, mass_mod)]
     modification_info = ','.join(modification_info)
     return(modification_info)
@@ -1962,9 +1979,9 @@ def main():
             logging.info("Pairing targets and decoys.")
             #create a target_sequence column used to pair the targets and decoys together at the sequence-level
             narrow_target_decoys['target_sequence'] = narrow_target_decoys['sequence']
-            narrow_target_decoys.loc[narrow_target_decoys['protein_id'].str.contains(dcy_prefix), 'target_sequence'] = reverse_sequence(narrow_target_decoys['sequence'][narrow_target_decoys['protein_id'].str.contains(dcy_prefix)])
+            narrow_target_decoys.loc[narrow_target_decoys['protein_id'].str.contains(dcy_prefix), 'target_sequence'] = narrow_target_decoys[narrow_target_decoys['protein_id'].str.contains(dcy_prefix)].apply(lambda x: reverse_sequence(x.sequence, x.modifications), axis = 1)
             open_target_decoys['target_sequence'] = open_target_decoys['sequence']
-            open_target_decoys.loc[open_target_decoys['protein_id'].str.contains(dcy_prefix), 'target_sequence'] = reverse_sequence(open_target_decoys['sequence'][open_target_decoys['protein_id'].str.contains(dcy_prefix)])
+            open_target_decoys.loc[open_target_decoys['protein_id'].str.contains(dcy_prefix), 'target_sequence'] = open_target_decoys[open_target_decoys['protein_id'].str.contains(dcy_prefix)].apply(lambda x: reverse_sequence(x.sequence, x.modifications), axis = 1)
     
     target_decoys_all = filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh, n_processes, neighbour_remove, tide_used, static_mods)
       
@@ -2002,6 +2019,7 @@ def main():
     
     if type(peptide_list) != str:
         peptide_list = peptide_list[~(peptide_list['target'] == peptide_list['decoy'])] #where the two peptides agree
+        peptide_list = peptide_list.drop_duplicates(['target'])
     
     #create groups
     df = create_groups(target_decoys_all, narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
