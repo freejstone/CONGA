@@ -1439,6 +1439,7 @@ def get_modification_info(peptide):
     mass_mod = re.findall(r"\[\d+.\d+\]\[\d+.\d+\]|\[\d+.\d+\]", peptide)
     modification_info = [''.join(x) for x in zip(positions, mass_mod)]
     modification_info = ','.join(modification_info)
+    modification_info = modification_info.replace('][', ',')
     return(modification_info)
 ###############################################################################
 def main():
