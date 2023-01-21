@@ -1,0 +1,13 @@
+name: test-with-data
+run-name: ${{ github.actor }} is testing commands with sample data
+on: 
+  push:
+    branches: [ develop-package ]
+jobs:
+  check-code-finishes:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: python3 CONGA.py ./data/tide/narrow_example1.tide-search.txt ./data/tide/open_example1.tide-search.txt
+      - run: python3 CONGA.py ./data/comet/narrow_example1.comet.txt ./data/comet/open_example1.comet.txt
+      - run: python3 CONGA.py ./data/MS/narrow.tsv ../data/MS/open.tsv ./data/MS/tide-index.peptides.txt

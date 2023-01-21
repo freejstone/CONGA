@@ -14,7 +14,7 @@ On this page we walk through a simple example of running conga for the three dif
 Crux-Tide
 =========
 
-You can download the search files to test the commands below: `Tide-search files <https://github.com/freejstone/open_groupwalk/tree/main/docs/pages/files/tide>`_.
+You can download the search files to test the commands below: `Tide-search files <https://github.com/freejstone/open_groupwalk/tree/main/data/tide>`_.
 
   To run CONGA using Tide results with default parameters, use the following command in the terminal.
 
@@ -40,7 +40,7 @@ The software will automatically detect if the PSMs in the search files have been
 Comet
 =====
 
-You can download the search files to test the commands below: `Comet-search files <https://github.com/freejstone/open_groupwalk/tree/main/docs/pages/files/comet>`_.
+You can download the search files to test the commands below: `Comet-search files <https://github.com/freejstone/open_groupwalk/tree/main/data/comet>`_.
 
 You can use either standalone Comet or the implementation of Comet in Crux. The CONGA software will automatically standardize the difference in terminology between the standalone version and the one in Crux. To run CONGA using Comet-search results with default parameters, use the following command in the terminal.
 
@@ -54,7 +54,7 @@ All other discussion related to CONGA's handle on varaible modifications in :ref
 MSFragger
 =========
 
-You can download the search files to test the commands below: `MSFragger-search files <https://github.com/freejstone/open_groupwalk/tree/main/docs/pages/files/MS>`_.
+You can download the search files to test the commands below: `MSFragger-search files <https://github.com/freejstone/open_groupwalk/tree/main/data/MS>`_.
 
 Using MSFragger search files is more challenging. MSFragger nor any of the related softwares in Fragpipe produce decoy peptides that *pair* with the target peptides, which is essential for CONGA. Unfortunately not even reversing the entire protein sequence and digesting the protein to produce decoy peptides yields the same result as reversing the target peptides. Instead the user must always provide a target-decoy pairing in the same format as what Tide-index produces. You can do this by creating your own script, with two columns one labelled *target* and the other *decoy*, or more simply by implementing Tide-index. The latter is reasonably achievable by matching the parameters in Tide-index with MSFragger. More specifically we have the following equivalencies between the two softwares.
 
