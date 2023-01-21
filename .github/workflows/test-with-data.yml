@@ -7,7 +7,15 @@ jobs:
   check-code-finishes:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
-      - run: python3 ./CONGA/CONGA.py ./data/tide/narrow_example1.tide-search.txt ./data/tide/open_example1.tide-search.txt
-      - run: python3 ./CONGA/CONGA.py ./data/comet/narrow_example1.comet.txt ./data/comet/open_example1.comet.txt
-      - run: python3 ./CONGA/CONGA.py ./data/MS/narrow.tsv ../data/MS/open.tsv ./data/MS/tide-index.peptides.txt
+      uses: actions/checkout@v3
+      with:
+          python-version: 3.9
+      run: python3 -m pip install --upgrade pip pandas
+      run: python3 -m pip install --upgrade pip pyteomics
+      run: python3 -m pip install --upgrade pip numpy
+      run: python3 -m pip install --upgrade pip scipy
+      run: python3 -m pip install --upgrade pip matplotlib
+      run: python3 -m pip install --upgrade pip tqdm
+      run: python3 ./CONGA/CONGA.py ./data/tide/narrow_example1.tide-search.txt ./data/tide/open_example1.tide-search.txt
+      run: python3 ./CONGA/CONGA.py ./data/comet/narrow_example1.comet.txt ./data/comet/open_example1.comet.txt
+      run: python3 ./CONGA/CONGA.py ./data/MS/narrow.tsv ../data/MS/open.tsv ./data/MS/tide-index.peptides.txt
