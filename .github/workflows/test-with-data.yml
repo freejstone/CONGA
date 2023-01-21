@@ -8,8 +8,9 @@ jobs:
     runs-on: macos-latest
     steps:
       uses: actions/checkout@v3
-      with:
-          python-version: 3.9
+      uses: actions/setup-python@v3
+        with:
+          python-version: 3.9.12
       run: python3 -m pip install --upgrade pip pandas
       run: python3 -m pip install --upgrade pip pyteomics
       run: python3 -m pip install --upgrade pip numpy
