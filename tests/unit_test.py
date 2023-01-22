@@ -60,15 +60,15 @@ def test_group_walk():
 def test_create_peptides_with_mod():
     peptides = pd.Series(['NQVNMWEPCK', 'ASDFBDCDC'])
     mods = pd.Series(['1N(229.163), 9C(57.021465), 10C(100.12345)', ''])
-    static_mods = {'S': 79.345}
-    assert cg.create_peptides_with_mod(peptides, mods, static_mods) == pd.Series(['N[229.163]QVNMWEPC[57.021465]K[100.12345]', 'ASDFBDCDC'])
+    static_mods = {'C': 57.02146}
+    assert cg.create_peptides_with_mod(peptides, mods, static_mods) == ['N[229.163]QVNMWEPCK[100.12345]', 'ASDFBDCDC']
 
 def test_reverse_sequence():
     assert cg.reverse_sequence('P[10.01][1.2345]EPTIDE[11.1]', '1_V_10.011_N, 1_V_1.23450, 7_V_11.1002_C') == 'D[10.01]ITPEP[1.2345]E[11.1]'
     
 def test_check_n_term():
     sequences = pd.Series(['[1.2345]ABCDEFG', '[1.2345]BCDEFG'])
-    assert cg.check_n_term(sequences) == pd.Series(['A[1.2345]BCDEFG', 'B[1.2345]CDEFG'])
+    assert cg.check_n_term(sequences).to_list() == ['A[1.2345]BCDEFG', 'B[1.2345]CDEFG'].to_list()
     
 def test_del_protein():
     dcy_prefix = 'decoy_'
