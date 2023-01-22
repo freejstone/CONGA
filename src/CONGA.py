@@ -1283,7 +1283,7 @@ def create_peptides_with_mod(unmodified_peptides, modification_info, static_mods
     Modified peptides in the format of tide-search.
 
     '''
-    modification_info = modification_info.str.findall('-?\d+\.\d+|-?\d+|N\\-term|C\\-term')
+    modification_info = modification_info.str.findall('-?\\d+.\\d+|-?\\d+')
     unmodified_peptides = unmodified_peptides.apply(list)
     df = pd.DataFrame({'unmodified_peptides': unmodified_peptides, 'modification_info':modification_info})
     modified_peptides = df.apply(lambda x: add_modification_to_amino_acid(x, static_mods), axis = 1)
@@ -1301,7 +1301,7 @@ def reverse_sequence(sequence, modifications):
     -------
     Recovers target sequences.
     '''
-    results = re.findall('[a-zA-Z]\\[\d+\.\d+\\]\\[\d+\.\d+\\]|[a-zA-Z]\\[\d+\.\d+\\]|[a-zA-Z]\\[\d+\\]|[a-zA-Z]', sequence)
+    results = re.findall('[a-zA-Z]\\[\\d+.\\d+\\]\\[\\d+.\\d+\\]|[a-zA-Z]\\[\\d+.\\d+\\]|[a-zA-Z]\\[\\d+\\]|[a-zA-Z]', sequence)
     if '_N' in modifications:
         n_term_mass_mod_list = re.findall(r"(\d+.\d+)_N", modifications)
         if len(n_term_mass_mod_list) > 0:
@@ -1793,8 +1793,8 @@ def main():
         
         if tide_used == 'tide':
             #This is redundant currently, as original_target_sequence is being printed WITHOUT modification (but this is may change in tide-search, so we run this anyways)
-            narrow_target_decoys['original_target_sequence'] = narrow_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
-            open_target_decoys['original_target_sequence'] = open_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
+            narrow_target_decoys['original_target_sequence'] = narrow_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True)
+            open_target_decoys['original_target_sequence'] = open_target_decoys['original_target_sequence'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True)
             
         narrow_target_decoys.reset_index(drop = True, inplace = True)
         open_target_decoys.reset_index(drop = True, inplace = True)
@@ -1874,10 +1874,10 @@ def main():
   
         #Creating original_target_sequence column for target files too, so that they exist when we concatenate our target and decoy search files
         if tide_used == 'tide':
-            narrow_1['original_target_sequence'] = narrow_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
-            open_1['original_target_sequence'] = open_1['sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
-            narrow_2['original_target_sequence'] = narrow_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
-            open_2['original_target_sequence'] = open_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
+            narrow_1['original_target_sequence'] = narrow_1['sequence'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True)
+            open_1['original_target_sequence'] = open_1['sequence'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True)
+            narrow_2['original_target_sequence'] = narrow_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True)
+            open_2['original_target_sequence'] = open_2['original_target_sequence'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True)
 
         if not len(narrow_1.columns) == len(narrow_2.columns):
             logging.error("Search files have different number of columns.")
@@ -2125,7 +2125,7 @@ def main():
         sys.stderr.write("Also reporting sequences with other variable modifications (--return_extra_mods T). \n")
         
         #gets the STEM sequence
-        df['sequence_without_mods_td'] = df['winning_peptides'].str.replace("\\[|\\]|\\.|\d+", "", regex = True) + "_" + df['labels'].astype(str)
+        df['sequence_without_mods_td'] = df['winning_peptides'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True) + "_" + df['labels'].astype(str)
 
         if type(peptide_list) == str:
             target_decoys_all['labels'] = (~(target_decoys_all['protein_id'].str.contains(dcy_prefix))).astype(int)
@@ -2134,7 +2134,7 @@ def main():
             target_decoys_all['labels'] = target_decoys_all['sequence'].isin(peptide_list['target'])
             target_decoys_all['labels'].replace({True:1, False:-1}, inplace = True)
 
-        target_decoys_all['sequence_without_mods_td'] = target_decoys_all['sequence'].str.replace("\\[|\\]|\\.|\d+", "", regex = True) + "_" + target_decoys_all['labels'].astype(str)
+        target_decoys_all['sequence_without_mods_td'] = target_decoys_all['sequence'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True) + "_" + target_decoys_all['labels'].astype(str)
         
         #get all target PSMs whose sequence equals to one in df up to modification but isn't exactly equal to the same sequence in df.
         target_decoys_all_sub = target_decoys_all[( target_decoys_all['sequence_without_mods_td'].isin(df['sequence_without_mods_td']) ) & ( target_decoys_all['labels'] == 1 ) & ~( target_decoys_all['sequence'].isin(df['winning_peptides']) )].copy()
@@ -2217,7 +2217,7 @@ def main():
 
     #ordering by q-value then peptides second
     if 'originally_discovered' in df.columns:
-        df['sequence_without_mods_td'] = df['peptide'].str.replace("\\[|\\]|\\.|\d+", "", regex = True)
+        df['sequence_without_mods_td'] = df['peptide'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True)
         df['min_q_vals'] = df.groupby(['sequence_without_mods_td']).q_value.transform('min')
         df = df.sort_values(by = ['min_q_vals', 'originally_discovered'], ascending = [True, False])
         df.pop('sequence_without_mods_td')
