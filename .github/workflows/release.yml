@@ -3,20 +3,23 @@ run-name: ${{ github.actor }} is creating a github release
 
 on:
   push:
-    branches:
-      - develop-package
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      
-      - uses: meeDamian/github-release@2.0
+      - uses: actions/checkout@v3
+
+      # steps for building assets
+      - run: echo "REPLACE ME!" > "dist/*tar.gz"
+
+      - name: Create Release
+        id: create_release
+        uses: shogo82148/actions-create-release@v1
+
+      - uses: shogo82148/actions-upload-release-asset@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ env.TAG }}
-          files: >
-            "dist/*tar.gz"
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: "dist/*tar.gz"
