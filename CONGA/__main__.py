@@ -18,7 +18,7 @@ import re
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
-from utils import CONGA_functions as cg
+from CONGA.utils import CONGA_functions as cg
 
 USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
 
