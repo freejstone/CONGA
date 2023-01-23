@@ -10,7 +10,7 @@ that the CONDA modules completes successfully using a few example data sets via 
 
 """
 
-import CONGA.CONGA as cg
+import CONGA as cg
 import random
 import pandas as pd
 import numpy as np
