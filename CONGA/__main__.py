@@ -19,6 +19,7 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 from CONGA.utils import CONGA_functions as cg
+from.version import __version__
 
 USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
 
@@ -412,6 +413,10 @@ def main():
     #print CPU info
     logging.info('CPU: ' + str(platform.platform()))
     sys.stderr.write('CPU: ' + str(platform.platform()) + " \n")
+    
+     #print version
+    logging.info('Version: ' + str(__version__))
+    sys.stderr.write('Version: ' + str(__version__) + " \n")
     
     #print date time info
     logging.info(str(datetime.datetime.now()))

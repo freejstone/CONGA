@@ -1,11 +1,15 @@
 import setuptools
+import versioneer
 
 with open("README.rst", "r") as fh:
     long_description = fh.read()
 
+exec(open('CONGA/version.py').read())
+
 setuptools.setup(
     name="CONGA",
-    version="1.0.0",
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
     author="Jack Freestone",
     author_email="jfre0619@uni.sydney.edu.au",
     description="Combined Open and Narrow searches via Group Analysis",
