@@ -10,7 +10,7 @@ import pandas as pd
 import random
 import numpy as np
 from scipy import stats
-from utils import peptides
+from . import peptides
 import multiprocessing
 import logging
 from tqdm import tqdm
