@@ -19,7 +19,9 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 from CONGA.utils import CONGA_functions as cg
-from.version import __version__
+from . import version
+__version__ = version.get_versions()['version']
+
 
 USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
 
