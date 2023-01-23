@@ -3,27 +3,21 @@ run-name: ${{ github.actor }} is creating a github release
 
 on:
   push:
-    tags:
-      - "[0-9]+.[0-9]+.[0-9]+"
     branches:
       - develop-package
-    
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-
-      # steps for building assets
-      - run: echo dist/CONGA-0.0.1.tar.gz
-
-      - name: Create Release
-        id: create_release
-        uses: shogo82148/actions-create-release@v1
-
-      - uses: shogo82148/actions-upload-release-asset@v1
+      - name: Create GitHub release
+        uses: Roang-zero1/github-create-release-action@v3
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/CONGA-0.0.1.tar.gz
+          version_regex: ^v[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+          
+        
