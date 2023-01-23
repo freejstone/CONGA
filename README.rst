@@ -46,7 +46,7 @@ Releases are published automatically when a tag is pushed to GitHub.
 .. code-block:: bash
 
    # Set next version number
-   export RELEASE=0.0.1
+   export RELEASE=x.x.x
 
    # Create tags
    git commit --allow-empty -m "Release $RELEASE"
