@@ -12,7 +12,7 @@ import pandas as pd
 import random
 import numpy as np
 from scipy import stats
-from peptides_sub import peptides
+from . import peptides
 import multiprocessing
 import os 
 import logging
