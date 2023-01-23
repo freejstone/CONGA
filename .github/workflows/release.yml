@@ -1,5 +1,4 @@
-name: Create Release
-run-name: ${{ github.actor }} is creating a github release
+name: Publish
 
 on:
   push:
@@ -9,15 +8,20 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
-  release:
+  build:
+    name: Publish binaries
     runs-on: ubuntu-latest
+
     steps:
-      - name: Create GitHub release
-        uses: Roang-zero1/github-create-release-action@v3
-        with:
-          version_regex: ^v[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+
-          file: "dist/*.tar.gz"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-        
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --release
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: "dist/*.tar.gz"
+        asset_name: CONGA
+        tag: ${{ github.ref }}
+        overwrite: true
+        body: "This is my release text"
