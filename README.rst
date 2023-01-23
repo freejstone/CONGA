@@ -37,3 +37,20 @@ If the CONGA folder is not in the Downloads folder, you will have to specify the
 ``pip install path/to/CONGA-x.x.x.tar.gz``
 
 Please see the documentation, specifically the tutorial, on how to run CONGA.
+
+Releasing
+---------
+
+Releases are published automatically when a tag is pushed to GitHub.
+
+.. code-block:: bash
+
+   # Set next version number
+   export RELEASE=0.0.1
+
+   # Create tags
+   git commit --allow-empty -m "Release $RELEASE"
+   git tag -a $RELEASE -m "Version $RELEASE"
+
+   # Push
+   git push upstream --tags
