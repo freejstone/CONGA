@@ -1,6 +1,0 @@
-pyteomics
-numpy
-pandas
-tqdm
-scipy
-matplotlib

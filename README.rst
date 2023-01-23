@@ -20,4 +20,20 @@ A link to the biorXiv paper will eventually go here.
 Installation
 ============
 
-To install simply go to Code, Download Zip and extract the Zip file. Installation of the relevant package dependencies are required (see CONGA.py). Please see the documentation, specifically the tutorial, on how to run CONGA.
+To install, first create a virtual environment using conda:
+
+``conda create --name conga_env python=3.9``
+
+Then activate this virtual environment:
+
+``conda activate conga_env``
+
+Next download the latest release from Github. Use `pip` to install CONGA:
+
+``pip install Downloads/CONGA-x.x.x.tar.gz``
+
+If the CONGA folder is not in the Downloads folder, you will have to specify the path to CONGA:
+
+``pip install path/to/CONGA-x.x.x.tar.gz``
+
+Please see the documentation, specifically the tutorial, on how to run CONGA.
