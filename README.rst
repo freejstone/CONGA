@@ -28,12 +28,12 @@ Then activate this virtual environment:
 
 ``conda activate conga_env``
 
-Next download and uncompress the latest release from Github. Use `pip` to install CONGA:
+Next download the latest release from Github. Use `pip` to install CONGA:
 
-``pip install Downloads/CONGA/``
+``pip install Downloads/CONGA-x.x.x.tar.gz``
 
 If the CONGA folder is not in the Downloads folder, you will have to specify the path to CONGA:
 
-``pip install path/to/CONGA/``
+``pip install path/to/CONGA-x.x.x.tar.gz``
 
 Please see the documentation, specifically the tutorial, on how to run CONGA.
