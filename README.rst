@@ -32,7 +32,7 @@ Next download and uncompress the latest release from Github. Use `pip` to instal
 
 ``pip install Downloads/CONGA/``
 
-If the CONGA fodler is not in the Downloads folder, you will have to specify the path to CONGA:
+If the CONGA folder is not in the Downloads folder, you will have to specify the path to CONGA:
 
 ``pip install path/to/CONGA/``
 

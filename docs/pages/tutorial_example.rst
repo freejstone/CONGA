@@ -2,7 +2,7 @@
 Tutorial example
 """"""""""""""""
 
-On this page we walk through a simple example of running conga for the three different search programs, Tide, Comet and MSFragger.
+Once CONGA has been installed in your conda-environment, CONGA can be called as a module using ``python3 -m CONGA``. On this page we walk through a simple example of running conga for the three different search programs, Tide, Comet and MSFragger. 
 
 
 
