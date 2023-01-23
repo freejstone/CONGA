@@ -1,4 +1,4 @@
-name: test-with-data
+name: Create Release
 run-name: ${{ github.actor }} is creating a github release
 
 on:
@@ -10,11 +10,12 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Create GitHub release
         uses: Roang-zero1/github-create-release-action@v3
         with:
           version_regex: ^v[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+
+          file: dist/
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
