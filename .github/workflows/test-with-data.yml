@@ -2,7 +2,6 @@ name: test-with-data
 run-name: ${{ github.actor }} is testing commands with sample data
 on: 
   push:
-    branches: [ develop-package ]
 jobs:
   check-code-finishes:
     runs-on: macos-latest

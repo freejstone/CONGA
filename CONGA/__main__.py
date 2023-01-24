@@ -1012,7 +1012,10 @@ def main():
 
     #dropping flanking_aa
     if tide_used == 'tide':
-        df['flag'] = df.apply(cg.get_amino_acid_to_warn, axis = 1)
+        if df.shape[0] > 0:
+            df['flag'] = df.apply(cg.get_amino_acid_to_warn, axis = 1)
+        else:
+            df['flag'] = pd.Series([], dtype = 'object')
         df.pop('flanking_aa')
     
     df['modification_info'] = df['peptide'].apply(cg.get_modification_info)
