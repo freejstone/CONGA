@@ -1,5 +1,5 @@
 FROM python:3.9
-LABEL maintainer="Michael Riffle <mriffle@uw.edu>"
+LABEL maintainer="Jack Freestone <jfre0619@uni.sydney.edu.au>"
 ENV APPDIR=/app
 
 WORKDIR  $APPDIR
