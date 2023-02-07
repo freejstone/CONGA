@@ -62,7 +62,7 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
     
     --tops_open <integer> The number of top PSMs in the open search used in
                           the neighbour-filtering process.
-                          Default = 5.     
+                          Default = 5.                         
                           
     --score <string>      Either 'tailor_score', 'xcorr_score', 'e-value' or
                           'hyperscore'. The score that will be used in the 
@@ -80,6 +80,11 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
                           classes of peptides which are equal up to
                           variable modification, or not.
                           Default = T.
+                          
+    --competition_window <value>    A window (in m/z) used to agglomerate precursors
+                                    according to their mass for h2h competition.
+                                    The isolation window size should go in here.
+                                    Default = 5.
                           
     --return_extra_mods <T|F>       All top 1 PSM-ranked target peptides that
                                     are equal to a discovered peptide
@@ -200,7 +205,104 @@ aa_table = pd.DataFrame({
    163.063329: 'Y',
     }.items(), columns = ['mass', 'aa'])
 ###############################################################################
-
+def print_info(command_line, output_dir, file_root, overwrite, account_mods, search_file_narrow, search_file_open):
+    #check if output directory exists, if not create and store log file there.
+    if os.path.isdir(output_dir):
+        if os.path.exists(path = output_dir + "/" + file_root + ".log.txt") and overwrite:
+            os.remove(output_dir + "/" + file_root + ".log.txt")
+            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+        elif os.path.exists(path = output_dir + "/" + file_root + ".log.txt") and not overwrite:
+            log_file = output_dir + "/" + file_root + ".log.txt"
+            sys.exit("The file %s already exists and cannot be overwritten. Use --overwrite T to replace or choose a different output file name. \n" %(log_file))
+        else:
+            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+    else:
+        os.mkdir(output_dir)
+        logging.basicConfig(filename=output_dir + "/" + file_root  + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+    
+    #print CPU info
+    logging.info('CPU: ' + str(platform.platform()))
+    sys.stderr.write('CPU: ' + str(platform.platform()) + " \n")
+    
+     #print version
+    logging.info('Version: ' + str(__version__))
+    sys.stderr.write('Version: ' + str(__version__) + " \n")
+    
+    #print date time info
+    logging.info(str(datetime.datetime.now()))
+    sys.stderr.write(str(datetime.datetime.now()) + " \n")
+    
+    #print command used
+    logging.info('Command used: ' + command_line)
+    sys.stderr.write('Command used: ' + command_line + "\n")
+    
+    sys.stderr.write("Successfully read in arguments. \n")
+    logging.info("Successfully read in arguments")
+    
+    if not account_mods:
+        logging.warning("No longer accounting for variable modification. FDR control not guaranteed if variable modifications exist.")
+        sys.stderr.write("No longer accounting for variable modification. FDR control not guaranteed if variable modifications exist. \n")
+    
+    if (not os.path.isfile(search_file_narrow)) or (not os.path.isfile(search_file_open)):
+        logging.info("One of the search files does not exist.")
+        sys.exit("One of the search files does not exist. \n")
+###############################################################################
+def read_search_files(search_file_narrow, search_file_open):
+    #read in files and standardize column names
+    #Comet has an initial comment starting with 'C' -- all others do not
+    with open(search_file_narrow) as f:
+        first_line_narrow = f.readline()
+    with open(search_file_open) as f:
+        first_line_open = f.readline()
+    
+    if 'Comet' in first_line_narrow:
+        narrow_target_decoys = pd.read_table(search_file_narrow, skiprows = 1)
+    else:
+        narrow_target_decoys = pd.read_table(search_file_narrow)
+    
+    if 'Comet' in first_line_open:
+        open_target_decoys = pd.read_table(search_file_open, skiprows = 1)
+    else:
+        open_target_decoys = pd.read_table(search_file_open)
+    
+    narrow_target_decoys.columns = narrow_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
+    open_target_decoys.columns = open_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
+    
+    if ('xcorr' in narrow_target_decoys.columns):
+        narrow_target_decoys.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
+        open_target_decoys.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
+    return(narrow_target_decoys, open_target_decoys)
+###############################################################################
+def rename_features(narrow_target_decoys, open_target_decoys, tide_used):
+    #rename protein id for consistency
+    if tide_used == 'ms_fragger':
+        narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
+        open_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
+        if ('alternative_proteins' in narrow_target_decoys.columns):
+            narrow_target_decoys['protein_id'] = narrow_target_decoys['protein_id'].astype(str) + ',' + narrow_target_decoys['alternative_proteins'].astype(str)
+        if ('alternative_proteins' in open_target_decoys.columns):
+            open_target_decoys['protein_id'] = open_target_decoys['protein_id'].astype(str) + ',' + open_target_decoys['alternative_proteins'].astype(str)
+        
+    #making standalone comet agree with crux comet 
+    if tide_used == 'comet':
+        if ('protein' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
+            open_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
+        if ('exp_neutral_mass' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
+            open_target_decoys.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
+        if ('plain_peptide' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
+            open_target_decoys.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
+        if ('modified_peptide' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
+            open_target_decoys.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
+        if ('calc_neutral_mass' in narrow_target_decoys.columns):
+            narrow_target_decoys.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
+            open_target_decoys.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
+    
+    return(narrow_target_decoys, open_target_decoys)
+###############################################################################
 def main():
     global USAGE
     
@@ -213,6 +315,7 @@ def main():
     tops_open = 5
     score = 'tailor_score'
     account_mods = True
+    competition_window = 5
     return_extra_mods = False
     precursor_bin_width = 1.0005079/4
     adaptive = True
@@ -267,6 +370,9 @@ def main():
             else:
                 sys.stderr.write("Invalid argument for --account_mods")
                 sys.exit(1)
+            sys.argv = sys.argv[1:]
+        elif (next_arg == "--competition_window"):
+            competition_window = sys.argv[0]
             sys.argv = sys.argv[1:]
         elif (next_arg == "--return_extra_mods"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
@@ -391,84 +497,26 @@ def main():
         search_file_open = sys.argv[1]
         td_list = sys.argv[2]
     else:
+        sys.stderr.write('Version: ' + str(__version__) + " \n")
         sys.stderr.write(USAGE)
         sys.exit(1)
     
     #setting seed for reproducibility
     if type(seed) == int:
         random.seed(seed)
+        np.random.seed(seed)
     
-    #check if output directory exists, if not create and store log file there.
-    if os.path.isdir(output_dir):
-        if os.path.exists(path = output_dir + "/" + file_root + ".log.txt") and overwrite:
-            os.remove(output_dir + "/" + file_root + ".log.txt")
-            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
-        elif os.path.exists(path = output_dir + "/" + file_root + ".log.txt") and not overwrite:
-            log_file = output_dir + "/" + file_root + ".log.txt"
-            sys.exit("The file %s already exists and cannot be overwritten. Use --overwrite T to replace or choose a different output file name. \n" %(log_file))
-        else:
-            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
-    else:
-        os.mkdir(output_dir)
-        logging.basicConfig(filename=output_dir + "/" + file_root  + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
-    
-    #print CPU info
-    logging.info('CPU: ' + str(platform.platform()))
-    sys.stderr.write('CPU: ' + str(platform.platform()) + " \n")
-    
-     #print version
-    logging.info('Version: ' + str(__version__))
-    sys.stderr.write('Version: ' + str(__version__) + " \n")
-    
-    #print date time info
-    logging.info(str(datetime.datetime.now()))
-    sys.stderr.write(str(datetime.datetime.now()) + " \n")
-    
-    #print command used
-    logging.info('Command used: ' + command_line)
-    sys.stderr.write('Command used: ' + command_line + "\n")
-    
-    sys.stderr.write("Successfully read in arguments. \n")
-    logging.info("Successfully read in arguments")
-    
-    if not account_mods:
-        logging.warning("No longer accounting for variable modification. FDR control not guaranteed if variable modifications exist.")
-    
-    if (not os.path.isfile(search_file_narrow)) or (not os.path.isfile(search_file_open)):
-        logging.info("One of the search files does not exist.")
-        sys.exit("One of the search files does not exist. \n")
+    #print meta information, checking directory and printing warnings
+    print_info(command_line, output_dir, file_root, overwrite, account_mods, search_file_narrow, search_file_open)
     
     sys.stderr.write("Reading in search files. \n")
     logging.info("Reading in search files.")
     
-    #read in files and standardize column names
-    #Comet has an initial comment starting with 'C' -- all others do not
-    with open(search_file_narrow) as f:
-        first_line_narrow = f.readline()
-    with open(search_file_open) as f:
-        first_line_open = f.readline()
-    
-    if 'Comet' in first_line_narrow:
-        narrow_target_decoys = pd.read_table(search_file_narrow, skiprows = 1)
-    else:
-        narrow_target_decoys = pd.read_table(search_file_narrow)
-    
-    if 'Comet' in first_line_open:
-        open_target_decoys = pd.read_table(search_file_open, skiprows = 1)
-    else:
-        open_target_decoys = pd.read_table(search_file_open)
-    
-    narrow_target_decoys.columns = narrow_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
-    open_target_decoys.columns = open_target_decoys.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
+    #reading in search files
+    narrow_target_decoys, open_target_decoys = read_search_files(search_file_narrow, search_file_open)
     
     sys.stderr.write("Successfully read in search files. \n")
     logging.info("Successfully read in search files.")
-    
-    if ('xcorr' in narrow_target_decoys.columns):
-        narrow_target_decoys.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
-        open_target_decoys.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
-    
-    
     
     #check if score matches with search file type given by the user
     #and establishes score and search file type
@@ -492,34 +540,9 @@ def main():
         tide_used = 'tide'
         sys.stderr.write("Tide search files detected. \n")
         logging.info("Tide search files detected.")     
-        
     
-    #rename protein id for consistency
-    if tide_used == 'ms_fragger':
-        narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
-        open_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
-        if ('alternative_proteins' in narrow_target_decoys.columns):
-            narrow_target_decoys.pop('alternative_proteins')
-        if ('alternative_proteins' in open_target_decoys.columns):
-            open_target_decoys.pop('alternative_proteins')
-        
-    #making standalone comet agree with crux comet 
-    if tide_used == 'comet':
-        if ('protein' in narrow_target_decoys.columns):
-            narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
-            open_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
-        if ('exp_neutral_mass' in narrow_target_decoys.columns):
-            narrow_target_decoys.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
-            open_target_decoys.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
-        if ('plain_peptide' in narrow_target_decoys.columns):
-            narrow_target_decoys.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
-            open_target_decoys.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
-        if ('modified_peptide' in narrow_target_decoys.columns):
-            narrow_target_decoys.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
-            open_target_decoys.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
-        if ('calc_neutral_mass' in narrow_target_decoys.columns):
-            narrow_target_decoys.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
-            open_target_decoys.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
+    #standardising feature names
+    narrow_target_decoys, open_target_decoys = rename_features(narrow_target_decoys, open_target_decoys, tide_used)
     
     #check to see if concantenated search file or separate search file used
     check_1 = any(narrow_target_decoys['protein_id'].str.contains(dcy_prefix))
@@ -576,58 +599,13 @@ def main():
         #search for corresponding decoy search files
         search_file_narrow_2 = search_file_narrow.replace("target", "decoy") 
         search_file_open_2 = search_file_open.replace("target", "decoy") 
-        
-        with open(search_file_narrow_2) as f:
-            first_line_narrow = f.readline()
-        with open(search_file_open_2) as f:
-            first_line_open = f.readline()
-        
-        if 'Comet' in first_line_narrow:
-            narrow_2 = pd.read_table(search_file_narrow_2, skiprows = 1)
-        else:
-            narrow_2 = pd.read_table(search_file_narrow_2)
-        
-        if 'Comet' in first_line_open:
-            open_2 = pd.read_table(search_file_open_2, skiprows = 1)
-        else:
-            open_2 = pd.read_table(search_file_open_2)
-            
-        #standardizing column names
-        narrow_2.columns = narrow_2.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
-        open_2.columns = open_2.columns.str.strip().str.lower().str.replace(' ', '_', regex = False).str.replace('(', '', regex = False).str.replace(')', '', regex = False).str.replace('/', '_', regex = False).str.replace('.', '_', regex = False)
+        narrow_2, open_2 = read_search_files(search_file_narrow_2, search_file_open_2)
         
         logging.info('Successfully read in decoy search files.')
         sys.stderr.write('Successfully read in decoy search files. \n')
         
-        #rename protein id for consistency
-        if tide_used == 'ms_fragger':
-            narrow_2.rename(columns = {'protein':'protein_id'}, inplace = True)
-            open_2.rename(columns = {'protein':'protein_id'}, inplace = True)
-            if ('alternative_proteins' in narrow_2.columns):
-                narrow_2.pop('alternative_proteins')
-            if ('alternative_proteins' in open_2.columns):
-                open_2.pop('alternative_proteins')
-
-        #making standalone comet agree with crux comet 
-        if tide_used == 'comet':
-            if ('xcorr' in narrow_2.columns):
-                narrow_2.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
-                open_2.rename(columns = {'xcorr':'xcorr_score'}, inplace = True)
-            if ('protein' in narrow_2.columns):
-                narrow_2.rename(columns = {'protein':'protein_id'}, inplace = True)
-                open_2.rename(columns = {'protein':'protein_id'}, inplace = True)
-            if ('exp_neutral_mass' in narrow_2.columns):
-                narrow_2.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
-                open_2.rename(columns = {'exp_neutral_mass':'spectrum_neutral_mass'}, inplace = True)
-            if ('plain_peptide' in narrow_2.columns):
-                narrow_2.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
-                open_2.rename(columns = {'plain_peptide':'sequence'}, inplace = True)
-            if ('modified_peptide' in narrow_2.columns):
-                narrow_2.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
-                open_2.rename(columns = {'modified_peptide':'modified_sequence'}, inplace = True)
-            if ('calc_neutral_mass' in narrow_2.columns):
-                narrow_2.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
-                open_2.rename(columns = {'calc_neutral_mass':'peptide_mass'}, inplace = True)
+        #standardising feature names
+        narrow_2, open_2 = rename_features(narrow_2, open_2, tide_used)
             
         check_1 = any(narrow_2['protein_id'].str.contains(dcy_prefix))
         check_2 = any(open_2['protein_id'].str.contains(dcy_prefix))
@@ -695,8 +673,8 @@ def main():
             open_target_decoys['xcorr_rank'] = open_target_decoys.groupby(["scan", "charge", "spectrum_neutral_mass"])["xcorr_score"].rank("first", ascending=False)
             open_target_decoys = open_target_decoys[open_target_decoys['xcorr_rank'].isin(range(1, tops_open + 1))]
         else:
-            narrow_target_decoys['hit_rank'] = narrow_target_decoys.groupby('scannum')["hyperscore"].rank("first", ascending=False)
-            open_target_decoys['hit_rank'] = open_target_decoys.groupby('scannum')["hyperscore"].rank("first", ascending=False)
+            narrow_target_decoys['hit_rank'] = narrow_target_decoys.groupby(['scannum'])["hyperscore"].rank("first", ascending=False)
+            open_target_decoys['hit_rank'] = open_target_decoys.groupby(['scannum'])["hyperscore"].rank("first", ascending=False)
             narrow_target_decoys = narrow_target_decoys[narrow_target_decoys['hit_rank'] == 1]
             open_target_decoys = open_target_decoys[open_target_decoys['hit_rank'].isin(range(1, tops_open + 1))]
             
@@ -742,10 +720,10 @@ def main():
             sys.stderr.write("Pairing targets and decoys. \n")
             logging.info("Pairing targets and decoys.")
             #create a target_sequence column used to pair the targets and decoys together at the sequence-level
-            narrow_target_decoys['target_sequence'] = narrow_target_decoys['sequence']
-            narrow_target_decoys.loc[narrow_target_decoys['protein_id'].str.contains(dcy_prefix), 'target_sequence'] = narrow_target_decoys[narrow_target_decoys['protein_id'].str.contains(dcy_prefix)].apply(lambda x: cg.reverse_sequence(x.sequence, x.modifications), axis = 1)
-            open_target_decoys['target_sequence'] = open_target_decoys['sequence']
-            open_target_decoys.loc[open_target_decoys['protein_id'].str.contains(dcy_prefix), 'target_sequence'] = open_target_decoys[open_target_decoys['protein_id'].str.contains(dcy_prefix)].apply(lambda x: cg.reverse_sequence(x.sequence, x.modifications), axis = 1)
+            narrow_target_decoys['original_target_sequence'] = narrow_target_decoys['sequence']
+            narrow_target_decoys.loc[narrow_target_decoys['protein_id'].str.contains(dcy_prefix), 'original_target_sequence'] = narrow_target_decoys[narrow_target_decoys['protein_id'].str.contains(dcy_prefix)].apply(lambda x: cg.reverse_sequence(x.sequence, x.modifications), axis = 1)
+            open_target_decoys['original_target_sequence'] = open_target_decoys['sequence']
+            open_target_decoys.loc[open_target_decoys['protein_id'].str.contains(dcy_prefix), 'original_target_sequence'] = open_target_decoys[open_target_decoys['protein_id'].str.contains(dcy_prefix)].apply(lambda x: cg.reverse_sequence(x.sequence, x.modifications), axis = 1)
     
     target_decoys_all = cg.filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh, n_processes, neighbour_remove, tide_used, static_mods)
       
@@ -753,7 +731,6 @@ def main():
         target_decoys_all['check_protein'] = target_decoys_all['protein_id'].apply(lambda x: cg.del_protein(x, dcy_prefix))
         target_decoys_all = target_decoys_all[target_decoys_all['check_protein'] == False]
         target_decoys_all = target_decoys_all.drop('check_protein', axis = 1)
-    
     
     #check if there are any variable modifications
     any_mods = any('[' in pep for pep in target_decoys_all['sequence'])
@@ -786,7 +763,7 @@ def main():
         peptide_list = peptide_list.drop_duplicates(['target'])
     
     #create groups
-    df = cg.create_groups(target_decoys_all, narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
+    df = cg.create_groups(target_decoys_all, narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0, competition_window)
     
     #e-values score things in reverse so reverse this for groupwalk
     if tide_used == 'comet' and score == 'e-value':
@@ -812,9 +789,11 @@ def main():
     
     #print Scan multiplicity: 
     if print_chimera:
-        if tide_used == 'tide':
             if power_1 > 0:
-                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
+                if tide_used == 'tide':
+                    scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
+                elif tide_used == 'comet' or tide_used == 'ms_fragger':
+                    scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
                 scan_mult1 = pd.DataFrame(scan_mult1)
                 scan_mult1.columns = ['Count']
                 scan_mult1.index.names = ['Scan multiplicity:']
@@ -824,7 +803,10 @@ def main():
                 sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
                 sys.stderr.write(scan_mult1.to_string() + "\n")
             if power_5 > 0:
-                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
+                if tide_used == 'tide':
+                    scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
+                elif tide_used == 'comet' or tide_used == 'ms_fragger':
+                    scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
                 scan_mult5 = pd.DataFrame(scan_mult5)
                 scan_mult5.columns = ['Count']
                 scan_mult5.index.names = ['Scan multiplicity:']
@@ -833,51 +815,7 @@ def main():
                 logging.info(scan_mult5.to_string())
                 sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
                 sys.stderr.write(scan_mult5.to_string() + "\n")
-        elif tide_used == 'comet':
-            if power_1 > 0:
-                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
-                scan_mult1 = pd.DataFrame(scan_mult1)
-                scan_mult1.columns = ['Count']
-                scan_mult1.index.names = ['Scan multiplicity:']
-    
-                logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
-                logging.info(scan_mult1.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
-                sys.stderr.write(scan_mult1.to_string() + "\n")
-            if power_5 > 0:
-                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
-                scan_mult5 = pd.DataFrame(scan_mult5)
-                scan_mult5.columns = ['Count']
-                scan_mult5.index.names = ['Scan multiplicity:']
-    
-                
-                logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
-                logging.info(scan_mult5.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
-                sys.stderr.write(scan_mult5.to_string() + "\n")
-        else:
-            if power_1 > 0:
-                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].value_counts().value_counts()
-                scan_mult1 = pd.DataFrame(scan_mult1)
-                scan_mult1.columns = ['Count']
-                scan_mult1.index.names = ['Scan multiplicity:']
-                
-                logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
-                logging.info(scan_mult1.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
-                sys.stderr.write(scan_mult1.to_string() + "\n")
-            
-            if power_5 > 0:
-                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].value_counts().value_counts()
-                scan_mult5 = pd.DataFrame(scan_mult5)
-                scan_mult5.columns = ['Count']
-                scan_mult5.index.names = ['Scan multiplicity:']
-                
-                logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
-                logging.info(scan_mult5.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
-                sys.stderr.write(scan_mult5.to_string() + "\n")
-        
+       
     df = df[df['q_vals'] <= FDR_threshold]
     
     if return_extra_mods and (not any_mods):
@@ -907,7 +845,8 @@ def main():
         else:
             target_decoys_all_sub = target_decoys_all_sub.sort_values(by=[score], ascending=True)
         
-        target_decoys_all_sub = target_decoys_all_sub.drop_duplicates(subset = ['sequence'])
+        #print all top 1 PSMs that differ by variable mods, even if there are double ups
+        #target_decoys_all_sub = target_decoys_all_sub.drop_duplicates(subset = ['sequence'])
         
         if (tide_used == 'tide') or (tide_used == 'comet'):
             rank = 'xcorr_rank'
@@ -930,6 +869,7 @@ def main():
                 charge = target_decoys_all_sub['charge']
                 spectrum_neutral_mass = target_decoys_all_sub['spectrum_neutral_mass']
                 flanking_aa = target_decoys_all_sub['flanking_aa']
+                protein = target_decoys_all_sub['protein_id']
                 df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'file'])
                 
             elif tide_used == 'comet':
@@ -942,6 +882,7 @@ def main():
                 scan = target_decoys_all_sub['scan']
                 charge = target_decoys_all_sub['charge']
                 spectrum_neutral_mass = target_decoys_all_sub['spectrum_neutral_mass']
+                protein = target_decoys_all_sub['protein_id']
                 df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan'])
             
             elif tide_used == 'ms_fragger':
@@ -952,7 +893,9 @@ def main():
                 delta_mass = target_decoys_all_sub['precursor_neutral_mass'] - target_decoys_all_sub['calc_neutral_pep_mass']
                 database = target_decoys_all_sub['database']
                 scan = target_decoys_all_sub['scannum']
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'scan'])
+                spectrum_neutral_mass = target_decoys_all_sub['precursor_neutral_mass']
+                protein = target_decoys_all_sub['protein_id']
+                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, spectrum_neutral_mass, scan, protein), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'spectrum_neutral_mass', 'scan', 'protein'])
             
             df['originally_discovered'] = True
             df_extra['originally_discovered'] = False
