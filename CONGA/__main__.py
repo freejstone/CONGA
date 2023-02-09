@@ -81,11 +81,13 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
                           variable modification, or not.
                           Default = T.
                           
-    --competition_window <value>    A value (in m/z) used to agglomerate precursors
-                                    according to their mass for h2h competition.
-                                    The largest of the left- and right- isolation window
-                                    offset should go here.
-                                    Default = 2.
+    --competition_window <value>    A pair of values (each given in m/z) used to 
+                                    agglomerate the precursors according to their mass
+                                    for subsequent competition. The first value should
+                                    be the left-offset of the isolation window and the
+                                    second value should be the right-offset. The
+                                    two values should be comma-separated.
+                                    Default = 2,2.
                           
     --return_extra_mods <T|F>       All top 1 PSM-ranked target peptides that
                                     are equal to a discovered peptide
@@ -316,7 +318,7 @@ def main():
     tops_open = 5
     score = 'tailor_score'
     account_mods = True
-    competition_window = 2
+    competition_window = [2, 2]
     return_extra_mods = False
     precursor_bin_width = 1.0005079/4
     adaptive = True
@@ -373,7 +375,8 @@ def main():
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--competition_window"):
-            competition_window = float(sys.argv[0])
+            competition_window = str(sys.argv[0]).split(',')
+            competition_window = [float(c) for c in competition_window]
             sys.argv = sys.argv[1:]
         elif (next_arg == "--return_extra_mods"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:

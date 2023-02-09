@@ -595,7 +595,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
 
     return target_decoys_all
 ###############################################################################
-def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix = 'decoy_', K = 40, tops = 2, score = 'tailor_score', account_mods = True, any_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = 'tide', print_group_pi0 = True, competition_window = 4):
+def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix = 'decoy_', K = 40, tops = 2, score = 'tailor_score', account_mods = True, any_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = 'tide', print_group_pi0 = True, competition_window = [2,2]):
     '''
     Parameters
     ----------
@@ -631,8 +631,8 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         Whether tide-search is used or not. The default is True.
     print_group_pi0 : bool, optional
         Whether to print the within-group decoy-target ratio to console. The default is True.
-    competition_window : float, optional
-        Window size used to cluster the precursor masses (in m/z) for dynamlic level competition. The default is 5.
+    competition_window : list, optional
+        Window used to cluster the precursor masses (in m/z) for dynamic level competition. The default is [2,2].
 
     Returns
     -------
@@ -699,19 +699,16 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     target_decoys = target_decoys.sample(frac = 1).reset_index(drop = True)
     if tide_used == 'tide' or tide_used == 'comet':
         #original target_sequence already handles whether it is at the sequence level or modified-sequence level
-        target_decoys['charged_mass'] = target_decoys['spectrum_neutral_mass']/target_decoys['charge']
-        target_decoys = target_decoys.sort_values(by='charged_mass', ascending=True).reset_index(drop = True)
-        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.charged_mass.shift(1) + competition_window)
+        target_decoys = target_decoys.sort_values(by='spectrum_neutral_mass', ascending=True).reset_index(drop = True)
+        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.spectrum_neutral_mass.shift(1) + (competition_window[0]*x.charge).combine(competition_window[1]*x.charge.shift(1), max))
         target_decoys.loc[target_decoys["mass_plus"].isna(), "mass_plus"] = -np.Inf
-        target_decoys["condition"] = target_decoys["charged_mass"] > target_decoys["mass_plus"]
+        target_decoys["condition"] = target_decoys["spectrum_neutral_mass"] > target_decoys["mass_plus"]
         target_decoys["cluster"] = target_decoys.groupby('original_target_sequence', group_keys = False).condition.cumsum()
     else:
-        target_decoys['charged_mass'] = target_decoys['precursor_neutral_mass']/target_decoys['charge']
-        target_decoys = target_decoys.sort_values(by='charged_mass', ascending=True)
-        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.charged_mass.shift(1) + competition_window)
+        target_decoys = target_decoys.sort_values(by='precursor_neutral_mass', ascending=True)
+        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.precursor_neutral_mass.shift(1) + (competition_window[0]*x.charge).combine(competition_window[1]*x.charge.shift(1), max))
         target_decoys.loc[target_decoys["mass_plus"].isna(), "mass_plus"] = -np.Inf
-        target_decoys["condition"] = target_decoys["charged_mass"] > target_decoys["mass_plus"]
-        target_decoys["cluster"] = target_decoys.condition.cumsum()
+        target_decoys["condition"] = target_decoys["precursor_neutral_mass"] > target_decoys["mass_plus"]
         target_decoys["cluster"] = target_decoys.groupby('original_target_sequence', group_keys = False).condition.cumsum() 
     
     #now doing h2h competition
