@@ -341,6 +341,7 @@ def main():
     return_decoys = False
     overwrite = False
     seed = None
+    get_q = False
     
     command_line = ' '.join(sys.argv)
     
@@ -488,6 +489,15 @@ def main():
             sys.argv = sys.argv[1:]
         elif (next_arg == '--seed'):
             seed = int(sys.argv[0])
+            sys.argv = sys.argv[1:]
+        elif (next_arg == '--get_q'):
+            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
+                get_q = True
+            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
+                get_q = False
+            else:
+                sys.stderr.write("Invalid argument for --get_q")
+                sys.exit(1)
             sys.argv = sys.argv[1:]
         else:
             sys.stderr.write("Invalid option (%s)" % next_arg)
@@ -937,7 +947,8 @@ def main():
     df = df.round({'delta_mass':4})
 
     #dropping q_values
-    df.pop('q_value')
+    if not get_q:
+        df.pop('q_value')
         
     #output the discovered peptides
     if return_extra_mods and any_mods:

@@ -1,3 +1,11 @@
+### v2.1.0
+
+- Added option to get q-vals.
+
+### v2.1.0
+
+- Corrected the dynamic level competition so that it clusters based on the neutral mass instead of charged mass.
+
 ### v2.0.0
 
 - Fixed seed
