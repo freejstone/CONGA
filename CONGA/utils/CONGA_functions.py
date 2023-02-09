@@ -700,13 +700,13 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     if tide_used == 'tide' or tide_used == 'comet':
         #original target_sequence already handles whether it is at the sequence level or modified-sequence level
         target_decoys = target_decoys.sort_values(by='spectrum_neutral_mass', ascending=True).reset_index(drop = True)
-        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.spectrum_neutral_mass.shift(1) + (competition_window[0]*x.charge).combine(competition_window[1]*x.charge.shift(1), max))
+        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.spectrum_neutral_mass.shift(1) + np.maximum(competition_window[0]*x.charge, competition_window[1]*x.charge.shift(1)))
         target_decoys.loc[target_decoys["mass_plus"].isna(), "mass_plus"] = -np.Inf
         target_decoys["condition"] = target_decoys["spectrum_neutral_mass"] > target_decoys["mass_plus"]
         target_decoys["cluster"] = target_decoys.groupby('original_target_sequence', group_keys = False).condition.cumsum()
     else:
         target_decoys = target_decoys.sort_values(by='precursor_neutral_mass', ascending=True)
-        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.precursor_neutral_mass.shift(1) + (competition_window[0]*x.charge).combine(competition_window[1]*x.charge.shift(1), max))
+        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.precursor_neutral_mass.shift(1) + np.maximum(competition_window[0]*x.charge, competition_window[1]*x.charge.shift(1)))
         target_decoys.loc[target_decoys["mass_plus"].isna(), "mass_plus"] = -np.Inf
         target_decoys["condition"] = target_decoys["precursor_neutral_mass"] > target_decoys["mass_plus"]
         target_decoys["cluster"] = target_decoys.groupby('original_target_sequence', group_keys = False).condition.cumsum() 
