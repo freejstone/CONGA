@@ -4,6 +4,7 @@
 - Simplified the CONGA tool so that the narrow variant of the PSM would be used prior to filtering instead of considering the open PSM
 - Protein is now reported
 - Most importantly, updated the dynamic level competition in order to consider delta masses.
+- Prints version when python3 -m CONGA is called
 
 ### v1.0.1
 

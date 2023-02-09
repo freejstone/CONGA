@@ -14,11 +14,12 @@ Neighbor filtration
 * ``--return_filt_search <T|F>``:  Whether or not to return filtered narrow and open search files. Default = F.
 
 -------------------------
-Peptide-level competition
+Dynamic-level competition
 -------------------------
 
 * ``--score <string>``: Either 'tailor_score', 'xcorr_score', 'e-value' or 'hyperscore'. The score that will be used in the peptide-level competition and subsequent Group construction and Group-walk algorithm. If 'tailor_score', it is assumed the search files are derived from Tide. If 'xcorr_score', either Tide or Comet is assumed to be used. If 'e-value', Comet is assumed. If 'hyperscore' it is assumed the search files are derived from MS-Fragger. Default = 'tailor_score'.
 * ``--account_mods <T|F>``: To determine whether CONGA uses the best PSM among the equivalent classes of peptides which are equal up to variable modification, or not. Default = T.
+* ``--competition_window <value>``: A value (in m/z) used to cluster precursors according to their mass for subsequent selection within each cluster. The maximum of the left- and right- offsets used in the isolation window during tandem MS should go here. Default = 2.
 
 ------------------
 Group construction

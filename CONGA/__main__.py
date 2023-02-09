@@ -81,10 +81,11 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
                           variable modification, or not.
                           Default = T.
                           
-    --competition_window <value>    A window (in m/z) used to agglomerate precursors
+    --competition_window <value>    A value (in m/z) used to agglomerate precursors
                                     according to their mass for h2h competition.
-                                    The isolation window size should go in here.
-                                    Default = 5.
+                                    The largest of the left- and right- isolation window
+                                    offset should go here.
+                                    Default = 2.
                           
     --return_extra_mods <T|F>       All top 1 PSM-ranked target peptides that
                                     are equal to a discovered peptide
@@ -315,7 +316,7 @@ def main():
     tops_open = 5
     score = 'tailor_score'
     account_mods = True
-    competition_window = 5
+    competition_window = 2
     return_extra_mods = False
     precursor_bin_width = 1.0005079/4
     adaptive = True
@@ -372,7 +373,7 @@ def main():
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--competition_window"):
-            competition_window = sys.argv[0]
+            competition_window = float(sys.argv[0])
             sys.argv = sys.argv[1:]
         elif (next_arg == "--return_extra_mods"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
