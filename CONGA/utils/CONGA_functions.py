@@ -662,7 +662,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     sys.stderr.write("Doing dynamic level competition.\n")
 
     #get target_decoy column
-    target_decoys["target_decoy"] = "target"
+    target_decoys.loc[:, "target_decoy"] = "target"
     if type(peptide_list) != str:
         target_decoys.loc[target_decoys['sequence'].isin(peptide_list['target']), "target_decoy"] = "target"
         target_decoys.loc[target_decoys['sequence'].isin(peptide_list['decoy']), "target_decoy"] = "decoy"
@@ -673,11 +673,12 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     #ensure correct ranks are considered
     if score == 'xcorr_score' or score == 'tailor_score' or score == 'e-value':
         target_decoys = target_decoys[(target_decoys['xcorr_rank'].isin(range(1, tops + 1)) & (target_decoys['database'] == "open")) | \
-                                      ((target_decoys['xcorr_rank'] == 1) & (target_decoys['database'] == "narrow"))]
+                                      ((target_decoys['xcorr_rank'] == 1) & (target_decoys['database'] == "narrow"))].copy()
     else:
         target_decoys = target_decoys[(target_decoys['hit_rank'].isin(range(1, tops + 1)) & (target_decoys['database'] == "open")) | \
-                                      ((target_decoys['hit_rank'] == 1) & (target_decoys['database'] == "narrow"))]
+                                      ((target_decoys['hit_rank'] == 1) & (target_decoys['database'] == "narrow"))].copy()
     
+    target_decoys.reset_index(drop = True, inplace = True)
     #get original_target_sequence for ms_fragger
     if tide_used == 'ms_fragger':
         if account_mods:
@@ -685,21 +686,24 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         else:
             pep = 'sequence'
         
+        #delete stem forms that are not found in the peptide_list
+        target_decoys = target_decoys[target_decoys[pep].isin(peptide_list['target']) | target_decoys[pep].isin(peptide_list['decoy'])]
+        
         #create equivalent 'original_target_sequence' column for MS fragger results
-        target_decoys['original_target_sequence'] = target_decoys[pep]
-        peptide_list.rename(columns = {'target':'original_target_sequence','decoy':pep}, inplace = True)
+        target_decoys.loc[:, 'original_target_sequence'] = target_decoys[pep]
         target_decoys_sub = target_decoys[target_decoys['target_decoy'] == 'decoy'].copy()
         target_decoys_sub.pop('original_target_sequence')
+        peptide_list.rename(columns = {'target':'original_target_sequence','decoy':pep}, inplace = True)
         target_decoys_sub = target_decoys_sub.merge(peptide_list[['original_target_sequence',pep]], how='left', on=pep)
-        target_decoys.loc[target_decoys['target_decoy'] == 'decoy', :] = target_decoys_sub.copy()
+        target_decoys.loc[target_decoys['target_decoy'] == 'decoy', 'original_target_sequence'] = target_decoys_sub['original_target_sequence'].tolist()
     if tide_used == 'tide' and (not account_mods) and any_mods:
         #create equivalent 'original_target_sequence' column for MS fragger results but with modifications
-        target_decoys['original_target_sequence'] = target_decoys['sequence']
-        peptide_list.rename(columns = {'target':'original_target_sequence','decoy':'sequence'}, inplace = True)
+        target_decoys.loc[:, 'original_target_sequence'] = target_decoys['sequence']
         target_decoys_sub = target_decoys[target_decoys['target_decoy'] == 'decoy'].copy()
         target_decoys_sub.pop('original_target_sequence')
-        target_decoys_sub = target_decoys_sub.merge(peptide_list[['original_target_sequence','sequence']], how='left', on=pep)
-        target_decoys.loc[target_decoys['target_decoy'] == 'decoy', :] = target_decoys_sub.copy()
+        peptide_list.rename(columns = {'target':'original_target_sequence','decoy':'sequence'}, inplace = True)
+        target_decoys_sub = target_decoys_sub.merge(peptide_list[['original_target_sequence','sequence']], how='left', on='sequence')
+        target_decoys.loc[target_decoys['target_decoy'] == 'decoy', 'original_target_sequence'] = target_decoys_sub['original_target_sequence'].tolist()
     
     #create a cluster column
     target_decoys = target_decoys.sample(frac = 1).reset_index(drop = True)

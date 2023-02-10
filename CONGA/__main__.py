@@ -282,9 +282,9 @@ def rename_features(narrow_target_decoys, open_target_decoys, tide_used):
         narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
         open_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
         if ('alternative_proteins' in narrow_target_decoys.columns):
-            narrow_target_decoys['protein_id'] = narrow_target_decoys['protein_id'].astype(str) + ',' + narrow_target_decoys['alternative_proteins'].astype(str)
+            narrow_target_decoys['protein_id'] = narrow_target_decoys['protein_id'].fillna('') + narrow_target_decoys['protein_id'].fillna('')
         if ('alternative_proteins' in open_target_decoys.columns):
-            open_target_decoys['protein_id'] = open_target_decoys['protein_id'].astype(str) + ',' + open_target_decoys['alternative_proteins'].astype(str)
+            open_target_decoys['protein_id'] = open_target_decoys['protein_id'].fillna('') + open_target_decoys['protein_id'].fillna('')
         
     #making standalone comet agree with crux comet 
     if tide_used == 'comet':
@@ -775,6 +775,7 @@ def main():
     if type(peptide_list) != str:
         peptide_list = peptide_list[~(peptide_list['target'] == peptide_list['decoy'])] #where the two peptides agree
         peptide_list = peptide_list.drop_duplicates(['target'])
+        
     
     #create groups
     df = cg.create_groups(target_decoys_all, narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0, competition_window)
