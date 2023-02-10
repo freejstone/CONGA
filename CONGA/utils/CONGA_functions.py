@@ -552,6 +552,9 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
     logging.info("Filtering for neighbours.")
     sys.stderr.write("Filtering for neighbours.\n")
     
+    target_decoys_all = target_decoys_all[~(target_decoys_all.sequence.str.contains('J'))]
+    target_decoys_all.reset_index(drop = True, inplace = True)
+    
     if n_processes == 1:
         tqdm.pandas()
         if tide_used == 'tide':
