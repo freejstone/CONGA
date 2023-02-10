@@ -5,7 +5,7 @@ CONGA: Combined Open and Narrow searches via Group Analysis
 A tool for discovering peptides with unaccounted for PTMs
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-CONGA is a tool for discovering peptides in mass spectrometry data with rigourous FDR control. It is designed to allow for unexpected post-translational modifications as well as chimeric spectra. Open Group-walk takes three inputs: (1) the set of top-scoring PSMs from a traditional, narrow-window search against a concatenated target-decoy database, (2) the set of top-k PSMs (or fewer if less than k PSMs exist) from an open search, again against a concatenated target-decoy database, and (3) the pairs of target and decoy peptide sequences from the database. Given this, Open Group-walk will return a discovery list of peptides.
+CONGA is a tool for discovering peptides in mass spectrometry data with rigourous FDR control. It is designed to allow for unexpected post-translational modifications as well as chimeric spectra. CONGA takes three inputs: (1) the set of top-scoring PSMs from a traditional, narrow-window search against a concatenated target-decoy database, (2) the set of top-k PSMs (or fewer if less than k PSMs exist) from an open search, again against a concatenated target-decoy database, and (3) the pairs of target and decoy peptide sequences from the database. Ideally, an additional option is set which specifies the isolation window used. Given this, CONGA will return a discovery list of peptides.
 
 Documentation
 =============
