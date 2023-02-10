@@ -523,7 +523,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
     
     #drop duplicate PSMs that are subsequently found in the open search
     if tide_used == 'tide':
-        target_decoys_all.drop_duplicates(['file', 'scan', 'charge', 'spectrum_neutral_mass', 'sequence'])
+        target_decoys_all = target_decoys_all.drop_duplicates(['file', 'scan', 'charge', 'spectrum_neutral_mass', 'sequence'])
     elif tide_used == 'comet':
         target_decoys_all = target_decoys_all.drop_duplicates(['scan', "charge", "spectrum_neutral_mass", 'sequence'])
     else:
@@ -532,12 +532,15 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
     
     #makes sure the PSMs from the narrow and open search are ordered by scan first, then by their score
     #indeed it makes sense to use xcorr_score over tailor score, as tailor_score uses candidate PSMs to 
-    #normalise the xcorr_score - this differs from narrow to open. 
+    #normalise the xcorr_score - this differs from narrow to open.
     if tide_used == 'tide':
+        target_decoys_all['xcorr_score'] = round(target_decoys_all['xcorr_score'], 6) 
         target_decoys_all = target_decoys_all.sort_values(by=['file', 'scan', 'charge', 'spectrum_neutral_mass', 'xcorr_score'], ascending = False)
     elif tide_used == 'comet':
+        target_decoys_all['xcorr_score'] = round(target_decoys_all['xcorr_score'], 6) 
         target_decoys_all = target_decoys_all.sort_values(by=['scan', "charge", "spectrum_neutral_mass", 'xcorr_score'], ascending = False)
     else:
+        target_decoys_all['hyperscore'] = round(target_decoys_all['hyperscore'], 6) 
         target_decoys_all = target_decoys_all.sort_values(by=['scannum', 'hyperscore'], ascending = False)
     target_decoys_all.reset_index(drop = True, inplace = True)
     
@@ -723,7 +726,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         
         if not check_1:
             logging.warning("Some PSMs that are found both in the narrow- and open- search file are labelled as 'open' instead of 'narrow'. Likely a numerical issue.")
-            sys.stderr.write("WARNING: Some PSMs that are found both in the narrow- and open- search file are labelled as 'open' instead of 'narrow'. Likely a numerical issue.")
+            sys.stderr.write("WARNING: Some PSMs that are found both in the narrow- and open- search file are labelled as 'open' instead of 'narrow'. Likely a numerical issue.\n")
         
         #order according to score
         if score != 'e-value':
