@@ -663,12 +663,8 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
 
     #get target_decoy column
     target_decoys.loc[:, "target_decoy"] = "target"
-    if type(peptide_list) != str:
-        target_decoys.loc[target_decoys['sequence'].isin(peptide_list['target']), "target_decoy"] = "target"
-        target_decoys.loc[target_decoys['sequence'].isin(peptide_list['decoy']), "target_decoy"] = "decoy"
-    else:
-        target_decoys.loc[~(target_decoys['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "target"
-        target_decoys.loc[(target_decoys['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "decoy"
+    target_decoys.loc[~(target_decoys['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "target"
+    target_decoys.loc[(target_decoys['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "decoy"
     
     #ensure correct ranks are considered
     if score == 'xcorr_score' or score == 'tailor_score' or score == 'e-value':

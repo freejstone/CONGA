@@ -1,3 +1,11 @@
+### v2.1.5
+
+- Further big fixes relating to MSFragger search files.
+
+### v2.1.4
+
+- Fixed up bugs relating to MSFragger search files.
+
 ### v2.1.1
 
 - Added option to get q-vals.

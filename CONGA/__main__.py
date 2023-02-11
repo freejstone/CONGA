@@ -282,9 +282,9 @@ def rename_features(narrow_target_decoys, open_target_decoys, tide_used):
         narrow_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
         open_target_decoys.rename(columns = {'protein':'protein_id'}, inplace = True)
         if ('alternative_proteins' in narrow_target_decoys.columns):
-            narrow_target_decoys['protein_id'] = narrow_target_decoys['protein_id'].fillna('') + narrow_target_decoys['protein_id'].fillna('')
+            narrow_target_decoys['protein_id'] = narrow_target_decoys[['protein_id', 'alternative_proteins']].fillna('').agg('@@'.join, axis=1)            
         if ('alternative_proteins' in open_target_decoys.columns):
-            open_target_decoys['protein_id'] = open_target_decoys['protein_id'].fillna('') + open_target_decoys['protein_id'].fillna('')
+            open_target_decoys['protein_id'] = open_target_decoys[['protein_id', 'alternative_proteins']].fillna('').agg('@@'.join, axis=1)
         
     #making standalone comet agree with crux comet 
     if tide_used == 'comet':
