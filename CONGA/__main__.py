@@ -869,7 +869,7 @@ def main():
     df_extra['originally_discovered'] = False
     
     df = pd.concat([df, df_extra])
-    if tide_used:
+    if tide_used == 'tide':
         df = df.drop_duplicates(subset = ['file', 'scan', 'charge', 'spectrum_neutral_mass', 'winning_peptides'])
     else:
         df = df.drop_duplicates(subset = ['scan', 'charge', 'spectrum_neutral_mass', 'winning_peptides'])
