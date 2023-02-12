@@ -1,6 +1,11 @@
+### v3.0.0
+
+- Reverted dynamic level competition so that it is done on stem sequence.
+- Added reporting feature of delta masses and variable mods of discovered peptides.
+
 ### v2.1.5
 
-- Further big fixes relating to MSFragger search files.
+- Further bug fixes relating to MSFragger search files.
 
 ### v2.1.4
 

@@ -81,19 +81,17 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
                           variable modification, or not.
                           Default = T.
                           
-    --competition_window <value>    A pair of values (each given in m/z) used to 
-                                    agglomerate the precursors according to their mass
+    --isolation_window <value>    The left and right isolation window offsets
+                                    used in tandem MS/MS. Values should be comma-
+                                    separated.
+                                    Default = 2,2
+                                    
+                                    precursors according to their mass
                                     for subsequent competition. The first value should
                                     be the left-offset of the isolation window and the
                                     second value should be the right-offset. The
                                     two values should be comma-separated.
                                     Default = 2,2.
-                          
-    --return_extra_mods <T|F>       All top 1 PSM-ranked target peptides that
-                                    are equal to a discovered peptide
-                                    up to variable modification will
-                                    be included in the file output.
-                                    Default = F.
                           
     --precursor_bin_width <value>   To determine the size of the bins
                                     used to discretize the mass-
@@ -318,8 +316,7 @@ def main():
     tops_open = 5
     score = 'tailor_score'
     account_mods = True
-    competition_window = [2, 2]
-    return_extra_mods = False
+    isolation_window = [2, 2]
     precursor_bin_width = 1.0005079/4
     adaptive = True
     print_chimera = True
@@ -375,18 +372,9 @@ def main():
                 sys.stderr.write("Invalid argument for --account_mods")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
-        elif (next_arg == "--competition_window"):
-            competition_window = str(sys.argv[0]).split(',')
-            competition_window = [float(c) for c in competition_window]
-            sys.argv = sys.argv[1:]
-        elif (next_arg == "--return_extra_mods"):
-            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
-                return_extra_mods = True
-            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
-                return_extra_mods = False
-            else:
-                sys.stderr.write("Invalid argument for --return_extra_mods")
-                sys.exit(1)
+        elif (next_arg == "--isolation_window"):
+            isolation_window = str(sys.argv[0]).split(',')
+            isolation_window = [float(c) for c in isolation_window]
             sys.argv = sys.argv[1:]
         elif (next_arg == "--precursor_bin_width"):
             precursor_bin_width = float(sys.argv[0])  
@@ -775,10 +763,40 @@ def main():
     if type(peptide_list) != str:
         peptide_list = peptide_list[~(peptide_list['target'] == peptide_list['decoy'])] #where the two peptides agree
         peptide_list = peptide_list.drop_duplicates(['target'])
+    
+    #get target_decoy column
+    target_decoys_all.loc[:, "target_decoy"] = "target"
+    target_decoys_all.loc[~(target_decoys_all['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "target"
+    target_decoys_all.loc[(target_decoys_all['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "decoy"
+    
+    #create original_target_sequence for msfragger
+    if tide_used == 'ms_fragger':
+        if account_mods:
+            pep = 'peptide'
+        else:
+            pep = 'sequence'
         
+        #delete stem forms that are not found in the peptide_list
+        target_decoys_all = target_decoys_all[target_decoys_all[pep].isin(peptide_list['target']) | target_decoys_all[pep].isin(peptide_list['decoy'])]
+        
+        #create equivalent 'original_target_sequence' column for MS fragger results
+        target_decoys_all.loc[:, 'original_target_sequence'] = target_decoys_all[pep]
+        target_decoys_all_sub = target_decoys_all[target_decoys_all['target_decoy'] == 'decoy'].copy()
+        target_decoys_all_sub.pop('original_target_sequence')
+        peptide_list.rename(columns = {'target':'original_target_sequence','decoy':pep}, inplace = True)
+        target_decoys_all_sub = target_decoys_all_sub.merge(peptide_list[['original_target_sequence',pep]], how='left', on=pep)
+        target_decoys_all.loc[target_decoys_all['target_decoy'] == 'decoy', 'original_target_sequence'] = target_decoys_all_sub['original_target_sequence'].tolist()
+    if tide_used == 'tide' and (not account_mods) and any_mods:
+        #create equivalent 'original_target_sequence' column but with modifications
+        target_decoys_all.loc[:, 'original_target_sequence'] = target_decoys_all['sequence']
+        target_decoys_all_sub = target_decoys_all[target_decoys_all['target_decoy'] == 'decoy'].copy()
+        target_decoys_all_sub.pop('original_target_sequence')
+        peptide_list.rename(columns = {'target':'original_target_sequence','decoy':'sequence'}, inplace = True)
+        target_decoys_all_sub = target_decoys_all_sub.merge(peptide_list[['original_target_sequence','sequence']], how='left', on='sequence')
+        target_decoys_all.loc[target_decoys_all['target_decoy'] == 'decoy', 'original_target_sequence'] = target_decoys_all_sub['original_target_sequence'].tolist()
     
     #create groups
-    df = cg.create_groups(target_decoys_all, narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0, competition_window)
+    df = cg.create_groups(target_decoys_all.copy(), narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
     
     #e-values score things in reverse so reverse this for groupwalk
     if tide_used == 'comet' and score == 'e-value':
@@ -804,122 +822,34 @@ def main():
     
     #print Scan multiplicity: 
     if print_chimera:
-            if power_1 > 0:
-                if tide_used == 'tide':
-                    scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
-                elif tide_used == 'comet' or tide_used == 'ms_fragger':
-                    scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
-                scan_mult1 = pd.DataFrame(scan_mult1)
-                scan_mult1.columns = ['Count']
-                scan_mult1.index.names = ['Scan multiplicity:']
-                
-                logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
-                logging.info(scan_mult1.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
-                sys.stderr.write(scan_mult1.to_string() + "\n")
-            if power_5 > 0:
-                if tide_used == 'tide':
-                    scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
-                elif tide_used == 'comet' or tide_used == 'ms_fragger':
-                    scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
-                scan_mult5 = pd.DataFrame(scan_mult5)
-                scan_mult5.columns = ['Count']
-                scan_mult5.index.names = ['Scan multiplicity:']
-                
-                logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
-                logging.info(scan_mult5.to_string())
-                sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
-                sys.stderr.write(scan_mult5.to_string() + "\n")
+        if power_1 > 0:
+            if tide_used == 'tide':
+                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
+            elif tide_used == 'comet' or tide_used == 'ms_fragger':
+                scan_mult1 = df['scan'][ ( df['q_vals'] <= 0.01 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
+            scan_mult1 = pd.DataFrame(scan_mult1)
+            scan_mult1.columns = ['Count']
+            scan_mult1.index.names = ['Scan multiplicity:']
+            
+            logging.info("Scan multiplicities among the discovered peptides at 1% FDR level:")
+            logging.info(scan_mult1.to_string())
+            sys.stderr.write("Scan multiplicities among the discovered peptides at 1% FDR level: \n")
+            sys.stderr.write(scan_mult1.to_string() + "\n")
+        if power_5 > 0:
+            if tide_used == 'tide':
+                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['file'], df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
+            elif tide_used == 'comet' or tide_used == 'ms_fragger':
+                scan_mult5 = df['scan'][ ( df['q_vals'] <= 0.05 ) & ( df['labels'] == 1) ].groupby([df['scan'], df['charge'], df['spectrum_neutral_mass']]).value_counts().value_counts()
+            scan_mult5 = pd.DataFrame(scan_mult5)
+            scan_mult5.columns = ['Count']
+            scan_mult5.index.names = ['Scan multiplicity:']
+            
+            logging.info("Scan multiplicities among the discovered peptides at 5% FDR level:")
+            logging.info(scan_mult5.to_string())
+            sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
+            sys.stderr.write(scan_mult5.to_string() + "\n")
        
     df = df[df['q_vals'] <= FDR_threshold]
-    
-    if return_extra_mods and (not any_mods):
-        logging.info("--return_extra_mods was set to T however no variable modifications were found.")
-        sys.stderr.write("--return_extra_mods was set to T however no variable modifications were found. \n")
-    elif return_extra_mods and any_mods:
-        logging.info("Also reporting sequences with other variable modifications (--return_extra_mods T).")
-        sys.stderr.write("Also reporting sequences with other variable modifications (--return_extra_mods T). \n")
-        
-        #gets the STEM sequence
-        df['sequence_without_mods_td'] = df['winning_peptides'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True) + "_" + df['labels'].astype(str)
-
-        if type(peptide_list) == str:
-            target_decoys_all['labels'] = (~(target_decoys_all['protein_id'].str.contains(dcy_prefix))).astype(int)
-            target_decoys_all.loc[target_decoys_all['labels'] == 0, 'labels'] = -1
-        else:
-            target_decoys_all['labels'] = target_decoys_all['sequence'].isin(peptide_list['target'])
-            target_decoys_all['labels'].replace({True:1, False:-1}, inplace = True)
-
-        target_decoys_all['sequence_without_mods_td'] = target_decoys_all['sequence'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True) + "_" + target_decoys_all['labels'].astype(str)
-        
-        #get all target PSMs whose sequence equals to one in df up to modification but isn't exactly equal to the same sequence in df.
-        target_decoys_all_sub = target_decoys_all[( target_decoys_all['sequence_without_mods_td'].isin(df['sequence_without_mods_td']) ) & ( target_decoys_all['labels'] == 1 ) & ~( target_decoys_all['sequence'].isin(df['winning_peptides']) )].copy()
-        
-        if score != 'e-value':
-            target_decoys_all_sub = target_decoys_all_sub.sort_values(by=[score], ascending=False)
-        else:
-            target_decoys_all_sub = target_decoys_all_sub.sort_values(by=[score], ascending=True)
-        
-        #print all top 1 PSMs that differ by variable mods, even if there are double ups
-        #target_decoys_all_sub = target_decoys_all_sub.drop_duplicates(subset = ['sequence'])
-        
-        if (tide_used == 'tide') or (tide_used == 'comet'):
-            rank = 'xcorr_rank'
-        else:
-            rank = 'hit_rank'
-    
-        target_decoys_all_sub = target_decoys_all_sub[target_decoys_all_sub[rank] == 1]
-        
-        if len(target_decoys_all_sub) > 0:
-        
-            if tide_used == 'tide':
-                winning_scores = target_decoys_all_sub[score]
-                labels = target_decoys_all_sub['labels']
-                winning_peptides = target_decoys_all_sub['sequence']
-                rank = target_decoys_all_sub['xcorr_rank']
-                delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
-                database = target_decoys_all_sub['database']
-                scan = target_decoys_all_sub['scan']
-                file = target_decoys_all_sub['file']
-                charge = target_decoys_all_sub['charge']
-                spectrum_neutral_mass = target_decoys_all_sub['spectrum_neutral_mass']
-                flanking_aa = target_decoys_all_sub['flanking_aa']
-                protein = target_decoys_all_sub['protein_id']
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'file'])
-                
-            elif tide_used == 'comet':
-                winning_scores = target_decoys_all_sub[score]
-                labels = target_decoys_all_sub['labels']
-                winning_peptides = target_decoys_all_sub['sequence']
-                rank = target_decoys_all_sub['xcorr_rank']
-                delta_mass = target_decoys_all_sub['spectrum_neutral_mass'] - target_decoys_all_sub['peptide_mass']
-                database = target_decoys_all_sub['database']
-                scan = target_decoys_all_sub['scan']
-                charge = target_decoys_all_sub['charge']
-                spectrum_neutral_mass = target_decoys_all_sub['spectrum_neutral_mass']
-                protein = target_decoys_all_sub['protein_id']
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan'])
-            
-            elif tide_used == 'ms_fragger':
-                winning_scores = target_decoys_all_sub['hyperscore']
-                labels = target_decoys_all_sub['labels']
-                winning_peptides = target_decoys_all_sub['sequence']
-                rank = target_decoys_all_sub['hit_rank']
-                delta_mass = target_decoys_all_sub['precursor_neutral_mass'] - target_decoys_all_sub['calc_neutral_pep_mass']
-                database = target_decoys_all_sub['database']
-                scan = target_decoys_all_sub['scannum']
-                spectrum_neutral_mass = target_decoys_all_sub['precursor_neutral_mass']
-                protein = target_decoys_all_sub['protein_id']
-                df_extra = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, spectrum_neutral_mass, scan, protein), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'spectrum_neutral_mass', 'scan', 'protein'])
-            
-            df['originally_discovered'] = True
-            df_extra['originally_discovered'] = False
-            df = pd.concat([df, df_extra])
-        
-        else:
-            logging.info("There are no other sequences with variable modifications that are the top match for an experimentral spectrum.")
-            sys.stderr.write("There are no other sequences with variable modifications that are the top match for an experimentral spectrum. \n")
-        
         
     if tide_used == 'comet' and score == 'e-value':
         df['winning_scores'] = -df['winning_scores']
@@ -930,19 +860,31 @@ def main():
     df_decoys = df[df['labels'] == -1].copy()
     df = df[df['labels'] == 1]
     df.pop('labels')
+    
+    df['originally_discovered'] = True
+    
+    logging.info("Reporting delta masses for each discovered peptide.")
+    sys.stderr.write("Reporting delta masses for each discovered peptide. \n")
+    df_extra = cg.create_cluster(target_decoys_all.copy(), df['winning_peptides'].copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
+    df_extra['originally_discovered'] = False
+    
+    df = pd.concat([df, df_extra])
+    if tide_used:
+        df = df.drop_duplicates(subset = ['file', 'scan', 'charge', 'spectrum_neutral_mass', 'winning_peptides'])
+    else:
+        df = df.drop_duplicates(subset = ['scan', 'charge', 'spectrum_neutral_mass', 'winning_peptides'])
+    
     df.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'q_vals':'q_value', 'database':'search_file'}, inplace = True)
     if return_decoys:
         df_decoys.pop('labels')
         df_decoys.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'q_vals':'q_value', 'database':'search_file'}, inplace = True)
         df_decoys = df_decoys.round({'delta_mass':4})
 
-    #ordering by q-value then peptides second
-    if 'originally_discovered' in df.columns:
-        df['sequence_without_mods_td'] = df['peptide'].str.replace("\\[|\\]|\\.|\\d+", "", regex = True)
-        df['min_q_vals'] = df.groupby(['sequence_without_mods_td']).q_value.transform('min')
-        df = df.sort_values(by = ['min_q_vals', 'originally_discovered'], ascending = [True, False])
-        df.pop('sequence_without_mods_td')
-        df.pop('min_q_vals')
+    #order according to score
+    if score != 'e-value':
+        df = df.sort_values(by=['score'], ascending = False)
+    else:
+        df = df.sort_values(by=['score'], ascending = True)    
     
     #rounding the mass differences
     df = df.round({'delta_mass':4})
@@ -952,12 +894,8 @@ def main():
         df.pop('q_value')
         
     #output the discovered peptides
-    if return_extra_mods and any_mods:
-        logging.info("Writing peptides at user-specified FDR level along with extrato directory.")
-        sys.stderr.write("Writing peptides at user-specified FDR level to directory. \n")
-    else:
-        logging.info("Writing peptides at user-specified FDR level to directory.")
-        sys.stderr.write("Writing peptides at user-specified FDR level to directory. \n")
+    logging.info("Writing peptides at user-specified FDR level to directory.")
+    sys.stderr.write("Writing peptides at user-specified FDR level to directory. \n")
     
     for aa in static_mods.keys():
         if aa == 'I' or aa == 'L': #Problem if someone uses two different static mods for I and L
@@ -981,16 +919,19 @@ def main():
     
     if output_dir != './':
         if os.path.isdir(output_dir):
-            df.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
+            df.to_csv(output_dir + "/" + file_root + ".target_mods.txt", header=True, index = False, sep = '\t')
+            df[df['originally_discovered'] == True].to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
             if return_decoys:
                 df_decoys.to_csv(output_dir + "/" + file_root + ".decoy.txt", header=True, index = False, sep = '\t')
         else:
             os.mkdir(output_dir)
-            df.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
+            df.to_csv(output_dir + "/" + file_root + ".target_mods.txt", header=True, index = False, sep = '\t')
+            df[df['originally_discovered'] == True].to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
             if return_decoys:
                 df_decoys.to_csv(output_dir + "/" + file_root + ".decoy.txt", header=True, index = False, sep = '\t')
     else:
-        df.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
+        df.to_csv(output_dir + "/" + file_root + ".target_mods.txt", header=True, index = False, sep = '\t')
+        df[df['originally_discovered'] == True].to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
         if return_decoys:
                 df_decoys.to_csv(output_dir + "/" + file_root + ".decoy.txt", header=True, index = False, sep = '\t')
         

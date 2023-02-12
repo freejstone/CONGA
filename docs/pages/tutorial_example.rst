@@ -20,23 +20,17 @@ To run CONGA using Tide results with default parameters, use the following comma
 
 ``python3 -m CONGA path/to/narrow_example1.tide-search.txt path/to/open_example1.tide-search.txt``
 
-CONGA's dynamic level competition first clusters together PSMs by considering precursors with similar masses (in m/z units) that are matched to the same "stem" target peptide or corresponding decoy peptide ("stem" here means a peptide with its variable modifications excluded). CONGA then identifies a "winning" peptide by taking the exact peptide among the PSMs belonging to this cluster, and defining a peptide score as the maximal PSM score among this cluster.
+CONGA allows for a variety of delta-masses (possibly unaccounted PTMs) and variable modifications to be reported for the same discovered sequence. It does this by clustering together PSMs by considering precursors with similar masses (in m/z units) that are matched to the same discovered "stem" sequence. It then takes the maximal scoring PSM in each cluster and for each modified variant of the "stem" sequence. To cluster the PSMs accurately, it is beneficial to supply a pair of values to ``--isolation-window``, which should be the lower and upper isolation window offsets in m/z units. By default, CONGA uses ``--isolation-window 2,2``. E.g. 
 
-To cluster the PSMs accurately, it is beneficial to supply a value to ``--competition-window``, which should be the width of the isolation window in m/z units. By default, CONGA assumes a fairly large window of 4 Th. E.g. 
+``python3 -m CONGA --isolation-window 0.75,0.75 path/to/narrow_example1.tide-search.txt path/to/open_example1.tide-search.txt``
 
-``python3 -m CONGA --competition-window 1.5 path/to/narrow_example1.tide-search.txt path/to/open_example1.tide-search.txt``
+CONGA's target-decoy competition is conducted over (unmodified) "stem" sequences. In other words, it reports the highest scoring PSM among all PSMs with the same stem sequence. If you want CONGA to report peptides that distinguish between sequences with different modifications, you can turn this feature off by setting ``--account_mods F``. Note that the assumptions of theoretical FDR control do not strictly hold in this case, because target peptides with variable modifications may be scored highly simply because they share similar b- and y-ions in common with the same target peptide but with possibly a different ensemble of variable modifications. In any case, if you wish to proceed, you will need to provide the tab-delimited target-decoy peptide pairs produced by tide-index.
 
-If you want to run CONGA so that it clusters according to the exact peptide, and not the "stem" peptide, and thus allowing the discovery of peptides that differ by the placement of the variable modification, you can turn this feature off by setting ``--account_mods F``. Note that the assumptions of theoretical FDR control do not strictly hold in this case, because target peptides with variable modifications may be scored highly simply because they share similar b- and y-ions in common with the same target peptide but with possibly a different location of the same variable modifications. In any case, if you wish to run without clustering to the "stem" form, you will need to provide the tab-delimited target-decoy peptide pairs produced by tide-index.
-
-``python3 -m CONGA --account_mods F --competition-window 1.5 path/to/narrow_example1.tide-search.txt path/to/open_example1.tide-search.txt path/to/tide-index_example1.peptides.txt``
-
-Alternatively, it might be of interest to report all other top-1 matched peptides that differ from a genuinely discovered peptide by some variable modification(s). One can achieve this by setting ``--return_extra_mods T``:
-
-``python3 -m CONGA --return_extra_mods T --competition-window 1.5 path/to/narrow_example1.tide-search.txt path/to/open_example1.tide-search.txt``
+``python3 -m CONGA --account_mods F --isolation-window 0.75,0.75 path/to/narrow_example1.tide-search.txt path/to/open_example1.tide-search.txt path/to/tide-index_example1.peptides.txt``
 
 The default score uses Tailor scores. If you prefer to use Xcorr Scores, you can change the score option ``--score xcorr_score``:
 
-``python3 -m CONGA --score xcorr_score --competition-window 1.5 path/to/narrow_example1.tide-search.txt path/to/open_example1.tide-search.txt``
+``python3 -m CONGA --score xcorr_score --isolation-window 0.75,0.75 path/to/narrow_example1.tide-search.txt path/to/open_example1.tide-search.txt``
 
 The software will automatically detect if the PSMs in the search files have been searched against a concatenated target-decoy database or separately against each database. If the latter, then you will need to have the name *target* appear in the search file names. In that case, the software will search for the respective decoy-search files by replacing *target* with *decoy* in the search file names in the same directory.
 
@@ -84,7 +78,7 @@ Using MSFragger search files is more challenging. MSFragger nor any of the relat
    * - --min_mass, --max_mass
      - digest_mass_range
 
-The default precision of the mass-modifications in Tide-index is to two decimal places, while MSFragger uses much higher precision. For this reason, CONGA will round the variable modifications in the MSFragger search files to two decimal places, allowing us to pair the peptides in MSFragger according to the target-decoy pairs produced by Tide-index. To run CONGA using MSFragger-search results with default parameters, use the following command:
+To run CONGA using MSFragger-search results with default parameters, use the following command:
 
 ``python3 -m CONGA --score hyperscore path/to/narrow.tsv path/to/open.tsv path/to/tide-index.peptides.txt``
 

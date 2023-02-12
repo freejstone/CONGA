@@ -601,7 +601,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
 
     return target_decoys_all
 ###############################################################################
-def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix = 'decoy_', K = 40, tops = 2, score = 'tailor_score', account_mods = True, any_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = 'tide', print_group_pi0 = True, competition_window = [2,2]):
+def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix = 'decoy_', K = 40, tops = 2, score = 'tailor_score', account_mods = True, any_mods = True, precursor_bin_width = 1.0005079/4, group_thresh = 0.01, adaptive = True, min_group_size = 2, n_top_groups = 4, tide_used = 'tide', print_group_pi0 = True):
     '''
     Parameters
     ----------
@@ -637,9 +637,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         Whether tide-search is used or not. The default is True.
     print_group_pi0 : bool, optional
         Whether to print the within-group decoy-target ratio to console. The default is True.
-    competition_window : list, optional
-        Window used to cluster the precursor masses (in m/z) for dynamic level competition. The default is [2,2].
-
+        
     Returns
     -------
     Dataframe containing the winning PSMs after head-to-head competition and their group labels.
@@ -661,11 +659,6 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     logging.info("Doing dynamic level competition.")
     sys.stderr.write("Doing dynamic level competition.\n")
 
-    #get target_decoy column
-    target_decoys.loc[:, "target_decoy"] = "target"
-    target_decoys.loc[~(target_decoys['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "target"
-    target_decoys.loc[(target_decoys['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "decoy"
-    
     #ensure correct ranks are considered
     if score == 'xcorr_score' or score == 'tailor_score' or score == 'e-value':
         target_decoys = target_decoys[(target_decoys['xcorr_rank'].isin(range(1, tops + 1)) & (target_decoys['database'] == "open")) | \
@@ -675,48 +668,6 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
                                       ((target_decoys['hit_rank'] == 1) & (target_decoys['database'] == "narrow"))].copy()
     
     target_decoys.reset_index(drop = True, inplace = True)
-    #get original_target_sequence for ms_fragger
-    if tide_used == 'ms_fragger':
-        if account_mods:
-            pep = 'peptide'
-        else:
-            pep = 'sequence'
-        
-        #delete stem forms that are not found in the peptide_list
-        target_decoys = target_decoys[target_decoys[pep].isin(peptide_list['target']) | target_decoys[pep].isin(peptide_list['decoy'])]
-        
-        #create equivalent 'original_target_sequence' column for MS fragger results
-        target_decoys.loc[:, 'original_target_sequence'] = target_decoys[pep]
-        target_decoys_sub = target_decoys[target_decoys['target_decoy'] == 'decoy'].copy()
-        target_decoys_sub.pop('original_target_sequence')
-        peptide_list.rename(columns = {'target':'original_target_sequence','decoy':pep}, inplace = True)
-        target_decoys_sub = target_decoys_sub.merge(peptide_list[['original_target_sequence',pep]], how='left', on=pep)
-        target_decoys.loc[target_decoys['target_decoy'] == 'decoy', 'original_target_sequence'] = target_decoys_sub['original_target_sequence'].tolist()
-    if tide_used == 'tide' and (not account_mods) and any_mods:
-        #create equivalent 'original_target_sequence' column for MS fragger results but with modifications
-        target_decoys.loc[:, 'original_target_sequence'] = target_decoys['sequence']
-        target_decoys_sub = target_decoys[target_decoys['target_decoy'] == 'decoy'].copy()
-        target_decoys_sub.pop('original_target_sequence')
-        peptide_list.rename(columns = {'target':'original_target_sequence','decoy':'sequence'}, inplace = True)
-        target_decoys_sub = target_decoys_sub.merge(peptide_list[['original_target_sequence','sequence']], how='left', on='sequence')
-        target_decoys.loc[target_decoys['target_decoy'] == 'decoy', 'original_target_sequence'] = target_decoys_sub['original_target_sequence'].tolist()
-    
-    #create a cluster column
-    target_decoys = target_decoys.sample(frac = 1).reset_index(drop = True)
-    if tide_used == 'tide' or tide_used == 'comet':
-        #original target_sequence already handles whether it is at the sequence level or modified-sequence level
-        target_decoys = target_decoys.sort_values(by='spectrum_neutral_mass', ascending=True).reset_index(drop = True)
-        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.spectrum_neutral_mass.shift(1) + np.maximum(competition_window[0]*x.charge, competition_window[1]*x.charge.shift(1)))
-        target_decoys.loc[target_decoys["mass_plus"].isna(), "mass_plus"] = -np.Inf
-        target_decoys["condition"] = target_decoys["spectrum_neutral_mass"] > target_decoys["mass_plus"]
-        target_decoys["cluster"] = target_decoys.groupby('original_target_sequence', group_keys = False).condition.cumsum()
-    else:
-        target_decoys = target_decoys.sort_values(by='precursor_neutral_mass', ascending=True)
-        target_decoys["mass_plus"] = target_decoys.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.precursor_neutral_mass.shift(1) + np.maximum(competition_window[0]*x.charge, competition_window[1]*x.charge.shift(1)))
-        target_decoys.loc[target_decoys["mass_plus"].isna(), "mass_plus"] = -np.Inf
-        target_decoys["condition"] = target_decoys["precursor_neutral_mass"] > target_decoys["mass_plus"]
-        target_decoys["cluster"] = target_decoys.groupby('original_target_sequence', group_keys = False).condition.cumsum() 
-    
     #now doing h2h competition
     if tide_used == 'tide' or tide_used == 'comet':
         target_decoys['scan_plus_seq'] = target_decoys['scan'].astype(str) + ' ' + target_decoys['charge'].astype(str) + ' ' + target_decoys['spectrum_neutral_mass'].astype(str) + ' ' + target_decoys['sequence']
@@ -738,7 +689,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
             target_decoys = target_decoys.sort_values(by=[score], ascending = True)    
         
         #take best PSM
-        target_decoys = target_decoys.drop_duplicates(subset = ['original_target_sequence', "cluster"])
+        target_decoys = target_decoys.drop_duplicates(subset = ['original_target_sequence'])
     
         #gather winning information
         winning_scores = target_decoys[score]
@@ -754,12 +705,13 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         charge = target_decoys['charge']
         spectrum_neutral_mass = target_decoys['spectrum_neutral_mass']
         protein = target_decoys['protein_id']
+        original_target_sequence = target_decoys['original_target_sequence']
         if tide_used == 'tide':
             file = target_decoys['file']
             flanking_aa = target_decoys['flanking_aa']
-            df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, protein, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'protein', 'file'])
+            df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, protein, original_target_sequence, file), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'protein', 'original_target_sequence', 'file'])
         else:
-            df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein'])
+            df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence'])
     else:
         target_decoys['scan_plus_seq'] = target_decoys['scannum'].astype(str) + ' ' + target_decoys['sequence']
         narrow_target_decoys.reset_index(drop = True, inplace = True)
@@ -777,7 +729,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         target_decoys = target_decoys.sort_values(by=['hyperscore'], ascending = False)
         
         #take best PSM up to variable modification, (narrow takes precedence) if account_mods
-        target_decoys = target_decoys.drop_duplicates(subset = ['original_target_sequence', 'cluster'])
+        target_decoys = target_decoys.drop_duplicates(subset = ['original_target_sequence'])
         
         winning_scores = target_decoys['hyperscore']
         
@@ -792,7 +744,8 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
         charge = target_decoys['charge']
         spectrum_neutral_mass = target_decoys['precursor_neutral_mass']
         protein = target_decoys['protein_id']
-        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein'])
+        original_target_sequence = target_decoys['original_target_sequence']
+        df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence), columns = ['winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence'])
         
     df = df.sample(frac = 1)
     
@@ -999,7 +952,7 @@ def add_modification_to_amino_acid(df, static_mods):
             if aa_list[site] in static_mods:
                 if abs(static_mods[aa_list[site]] - float(mass)) <= 10**(-4):
                     continue
-            aa_list[site] = aa_list[site] + '[' + str(round(float(mass), 6)) + ']'
+            aa_list[site] = aa_list[site] + '[' + str(round(float(mass), 4)) + ']'
             
         return(aa_list)
 
@@ -1157,3 +1110,69 @@ def get_modification_info(peptide):
     modification_info = modification_info.replace('][', ',')
     return(modification_info)
 ###############################################################################
+def create_cluster(target_decoys, original_target_discoveries, dcy_prefix, score, tops, tide_used, isolation_window):
+    #get target_decoy column
+    targets = target_decoys[target_decoys['target_decoy'] == 'target'].copy()
+    
+    #ensure correct ranks are considered
+    if score == 'xcorr_score' or score == 'tailor_score' or score == 'e-value':
+        targets = targets[targets['xcorr_rank'] == 1].copy()
+    else:
+        targets = targets[targets['hit_rank'] == 1].copy()
+        
+    targets = targets[targets['original_target_sequence'].isin(original_target_discoveries)].copy()
+        
+    #create a cluster column
+    targets = targets.sample(frac = 1).reset_index(drop = True)
+    if tide_used == 'tide' or tide_used == 'comet':
+        #original target_sequence already handles whether it is at the sequence level or modified-sequence level
+        targets = targets.sort_values(by='spectrum_neutral_mass', ascending=True).reset_index(drop = True)
+        targets["mass_plus"] = targets.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.spectrum_neutral_mass.shift(1) + np.maximum(isolation_window[0]*x.charge, isolation_window[1]*x.charge.shift(1)))
+        targets.loc[targets["mass_plus"].isna(), "mass_plus"] = -np.Inf
+        targets["condition"] = targets["spectrum_neutral_mass"] > targets["mass_plus"]
+        targets["cluster"] = targets.groupby('original_target_sequence', group_keys = False).condition.cumsum()
+    else:
+        targets = targets.sort_values(by='precursor_neutral_mass', ascending=True)
+        targets["mass_plus"] = targets.groupby('original_target_sequence', group_keys = False).apply(lambda x: x.precursor_neutral_mass.shift(1) + np.maximum(isolation_window[0]*x.charge, isolation_window[1]*x.charge.shift(1)))
+        targets.loc[targets["mass_plus"].isna(), "mass_plus"] = -np.Inf
+        targets["condition"] = targets["precursor_neutral_mass"] > targets["mass_plus"]
+        targets["cluster"] = targets.groupby('original_target_sequence', group_keys = False).condition.cumsum()
+    
+    #order according to score
+    if score != 'e-value':
+        targets = targets.sort_values(by=[score], ascending = False)
+    else:
+        targets = targets.sort_values(by=[score], ascending = True)    
+    
+    #take best PSM according to cluster and sequence with modification
+    targets = targets.drop_duplicates(subset = ['sequence', 'cluster'])
+    
+    if tide_used == 'tide' or tide_used == 'comet':
+        winning_scores = target_decoys[score]
+        winning_peptides = targets['sequence']
+        rank = targets['xcorr_rank']
+        delta_mass = targets['spectrum_neutral_mass'] - targets['peptide_mass']
+        database = targets['database']
+        scan = targets['scan']
+        charge = targets['charge']
+        spectrum_neutral_mass = targets['spectrum_neutral_mass']
+        protein = targets['protein_id']
+        if tide_used == 'tide':
+            file = targets['file']
+            flanking_aa = targets['flanking_aa']
+            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, protein, file), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'protein', 'file'])
+        else:
+            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein'])
+    else:
+        winning_scores = target_decoys[score]
+        winning_peptides = target_decoys['sequence']
+        rank = target_decoys['hit_rank']
+        delta_mass = target_decoys['precursor_neutral_mass'] - target_decoys['calc_neutral_pep_mass']
+        database = target_decoys['database']
+        scan = target_decoys['scannum']
+        charge = target_decoys['charge']
+        spectrum_neutral_mass = target_decoys['precursor_neutral_mass']
+        protein = target_decoys['protein_id']
+        df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein'])
+    
+    return(df_extra)
