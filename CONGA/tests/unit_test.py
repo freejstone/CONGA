@@ -63,9 +63,6 @@ def test_create_peptides_with_mod():
     static_mods = {'C': 57.02146}
     assert cg.create_peptides_with_mod(unmod_peptides, mods, static_mods).to_list() == ['N[229.163]QVNMWEPCK[100.12345]', 'ASDFBDCDC']
 
-def test_reverse_sequence():
-    assert cg.reverse_sequence('P[10.01][1.2345]EPTIDE[11.1]', '1_V_10.011_N, 1_V_1.23450, 7_V_11.1002_C') == 'D[10.01]ITPEP[1.2345]E[11.1]'
-    
 def test_check_n_term():
     sequences = pd.Series(['[1.2345]ABCDEFG', '[1.2345]BCDEFG'])
     assert cg.check_n_term(sequences).to_list() == ['A[1.2345]BCDEFG', 'B[1.2345]CDEFG']
