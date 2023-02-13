@@ -78,6 +78,8 @@ Using MSFragger search files is more challenging. MSFragger nor any of the relat
    * - --min_mass, --max_mass
      - digest_mass_range
 
+In addition to the above parameters, one should also make sure that the number of decimal places reported by variable-modifications in tide-index match with those in MSFragger. This is only important for target-decoy pairing when variable modifications are considered.
+
 To run CONGA using MSFragger-search results with default parameters, use the following command:
 
 ``python3 -m CONGA --score hyperscore path/to/narrow.tsv path/to/open.tsv path/to/tide-index.peptides.txt``
