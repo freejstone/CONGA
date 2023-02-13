@@ -769,6 +769,14 @@ def main():
     target_decoys_all.loc[~(target_decoys_all['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "target"
     target_decoys_all.loc[(target_decoys_all['protein_id'].str.contains(dcy_prefix)), "target_decoy"] = "decoy"
     
+    #ensure correct ranks are considered
+    if score == 'xcorr_score' or score == 'tailor_score' or score == 'e-value':
+        target_decoys_all = target_decoys_all[(target_decoys_all['xcorr_rank'].isin(range(1, tops_gw + 1)) & (target_decoys_all['database'] == "open")) | \
+                                      ((target_decoys_all['xcorr_rank'] == 1) & (target_decoys_all['database'] == "narrow"))].copy()
+    else:
+        target_decoys_all = target_decoys_all[(target_decoys_all['hit_rank'].isin(range(1, tops_gw + 1)) & (target_decoys_all['database'] == "open")) | \
+                                      ((target_decoys_all['hit_rank'] == 1) & (target_decoys_all['database'] == "narrow"))].copy()
+    
     #create original_target_sequence for msfragger
     if tide_used == 'ms_fragger':
         if account_mods:
@@ -863,8 +871,8 @@ def main():
     
     df['originally_discovered'] = True
     
-    logging.info("Reporting delta masses for each discovered peptide.")
-    sys.stderr.write("Reporting delta masses for each discovered peptide. \n")
+    logging.info("Reporting delta masses and variable modifications (if applicable) for each discovered peptide.")
+    sys.stderr.write("Reporting delta masses and variable modifications (if applicable) for each discovered peptide. \n")
     df_extra = cg.create_cluster(target_decoys_all.copy(), df['winning_peptides'].copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
     df_extra['originally_discovered'] = False
     
@@ -879,12 +887,15 @@ def main():
         df_decoys.pop('labels')
         df_decoys.rename(columns = {'winning_scores':'score', 'winning_peptides':'peptide', 'q_vals':'q_value', 'database':'search_file'}, inplace = True)
         df_decoys = df_decoys.round({'delta_mass':4})
-
-    #order according to score
+    
     if score != 'e-value':
-        df = df.sort_values(by=['score'], ascending = False)
+        #order according to best scoring stems, and then within each stem the score
+        df['best_score'] = df.groupby(['original_target_sequence']).score.transform('max')
+        df = df.sort_values(by = ['best_score', 'score'], ascending = [False, False])
     else:
-        df = df.sort_values(by=['score'], ascending = True)    
+        df['best_score'] = df.groupby(['original_target_sequence']).score.transform('min')
+        df = df.sort_values(by = ['best_score', 'score'], ascending = [True, True])
+    df.pop('original_target_sequence')
     
     #rounding the mass differences
     df = df.round({'delta_mass':4})

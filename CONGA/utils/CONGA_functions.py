@@ -659,14 +659,6 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     logging.info("Doing dynamic level competition.")
     sys.stderr.write("Doing dynamic level competition.\n")
 
-    #ensure correct ranks are considered
-    if score == 'xcorr_score' or score == 'tailor_score' or score == 'e-value':
-        target_decoys = target_decoys[(target_decoys['xcorr_rank'].isin(range(1, tops + 1)) & (target_decoys['database'] == "open")) | \
-                                      ((target_decoys['xcorr_rank'] == 1) & (target_decoys['database'] == "narrow"))].copy()
-    else:
-        target_decoys = target_decoys[(target_decoys['hit_rank'].isin(range(1, tops + 1)) & (target_decoys['database'] == "open")) | \
-                                      ((target_decoys['hit_rank'] == 1) & (target_decoys['database'] == "narrow"))].copy()
-    
     target_decoys.reset_index(drop = True, inplace = True)
     #now doing h2h competition
     if tide_used == 'tide' or tide_used == 'comet':
@@ -1114,12 +1106,6 @@ def create_cluster(target_decoys, original_target_discoveries, dcy_prefix, score
     #get target_decoy column
     targets = target_decoys[target_decoys['target_decoy'] == 'target'].copy()
     
-    #ensure correct ranks are considered
-    if score == 'xcorr_score' or score == 'tailor_score' or score == 'e-value':
-        targets = targets[targets['xcorr_rank'] == 1].copy()
-    else:
-        targets = targets[targets['hit_rank'] == 1].copy()
-        
     targets = targets[targets['original_target_sequence'].isin(original_target_discoveries)].copy()
         
     #create a cluster column
@@ -1148,7 +1134,7 @@ def create_cluster(target_decoys, original_target_discoveries, dcy_prefix, score
     targets = targets.drop_duplicates(subset = ['sequence', 'cluster'])
     
     if tide_used == 'tide' or tide_used == 'comet':
-        winning_scores = target_decoys[score]
+        winning_scores = targets[score]
         winning_peptides = targets['sequence']
         rank = targets['xcorr_rank']
         delta_mass = targets['spectrum_neutral_mass'] - targets['peptide_mass']
@@ -1157,22 +1143,24 @@ def create_cluster(target_decoys, original_target_discoveries, dcy_prefix, score
         charge = targets['charge']
         spectrum_neutral_mass = targets['spectrum_neutral_mass']
         protein = targets['protein_id']
+        original_target_sequence = targets['original_target_sequence']
         if tide_used == 'tide':
             file = targets['file']
             flanking_aa = targets['flanking_aa']
-            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, protein, file), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'protein', 'file'])
+            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, protein, original_target_sequence, file), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'protein', 'original_target_sequence', 'file'])
         else:
-            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein'])
+            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence'])
     else:
-        winning_scores = target_decoys[score]
-        winning_peptides = target_decoys['sequence']
-        rank = target_decoys['hit_rank']
-        delta_mass = target_decoys['precursor_neutral_mass'] - target_decoys['calc_neutral_pep_mass']
-        database = target_decoys['database']
-        scan = target_decoys['scannum']
-        charge = target_decoys['charge']
-        spectrum_neutral_mass = target_decoys['precursor_neutral_mass']
-        protein = target_decoys['protein_id']
-        df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein'])
+        winning_scores = targets[score]
+        winning_peptides = targets['sequence']
+        rank = targets['hit_rank']
+        delta_mass = targets['precursor_neutral_mass'] - targets['calc_neutral_pep_mass']
+        database = targets['database']
+        scan = targets['scannum']
+        charge = targets['charge']
+        spectrum_neutral_mass = targets['precursor_neutral_mass']
+        protein = targets['protein_id']
+        original_target_sequence = targets['original_target_sequence']
+        df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence'])
     
     return(df_extra)
