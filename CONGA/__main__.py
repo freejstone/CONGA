@@ -873,10 +873,12 @@ def main():
     
     logging.info("Reporting delta masses and variable modifications (if applicable) for each discovered peptide.")
     sys.stderr.write("Reporting delta masses and variable modifications (if applicable) for each discovered peptide. \n")
-    df_extra = cg.create_cluster(target_decoys_all.copy(), df['winning_peptides'].copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
-    df_extra['originally_discovered'] = False
     
-    df = pd.concat([df, df_extra])
+    if df.shape[0] > 0:
+        df_extra = cg.create_cluster(target_decoys_all.copy(), df['winning_peptides'].copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
+        df_extra['originally_discovered'] = False
+        df = pd.concat([df, df_extra])
+        
     if tide_used == 'tide':
         df = df.drop_duplicates(subset = ['file', 'scan', 'charge', 'spectrum_neutral_mass', 'winning_peptides'])
     else:
