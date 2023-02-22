@@ -1170,11 +1170,14 @@ def create_cluster(target_decoys, original_target_discoveries, dcy_prefix, score
     
     return(df_extra)
 ###############################################################################
-def get_thresholds(df1, df2, df_all, delta_mass_max, precursor_bin_width, tops_gw):
-    
+def get_thresholds(df1, df2, df_all, delta_mass_max, precursor_bin_width, tops_gw, score):
+    #flip score if e-value
     #need to determine the smallest score value for each group
-    min_qs = df1.groupby('all_group_ids').agg({'winning_scores': 'min'}).copy()
-    
+    if score == 'e-value':
+        min_qs = df1.groupby('all_group_ids').agg({'winning_scores': 'max'}).copy()
+    else:
+        min_qs = df1.groupby('all_group_ids').agg({'winning_scores': 'min'}).copy()
+        
     #need to get bin values for df2
     breaks_p = np.arange(0, delta_mass_max + 2*precursor_bin_width, precursor_bin_width) - precursor_bin_width/2
     breaks_n = list(reversed(-breaks_p))
@@ -1199,11 +1202,17 @@ def get_thresholds(df1, df2, df_all, delta_mass_max, precursor_bin_width, tops_g
     df2.loc[(df2['rank'].isin(range(2, tops_gw + 1))) & (df2['bins'].isin(table_top2.index)), 'all_group_ids'] = 'top 2 or more PSMs'
     
     #remaining top>1 open PSMs do not get assigned a group label
-    df2['score_threshold'] = np.Inf
-    df2.loc[df2['all_group_ids'] != 'NA', 'score_threshold'] = df2[df2['all_group_ids'] != 'NA'].apply(lambda x: min_qs.loc[x['all_group_ids']], axis = 1).winning_scores
+    if score == 'e-value':
+        df2['score_threshold'] = -np.Inf
+    else:
+        df2['score_threshold'] = np.Inf
+    df2.loc[df2['all_group_ids'].isin(min_qs.index), 'score_threshold'] = df2[df2['all_group_ids'].isin(min_qs.index)].apply(lambda x: min_qs.loc[x['all_group_ids']], axis = 1).winning_scores
     
-    df2['above_group_threshold'] = df2['winning_scores'] >= df2['score_threshold']
-    
+    if score == 'e-value':
+        df2['above_group_threshold'] = df2['winning_scores'] <= df2['score_threshold']
+    else:
+        df2['above_group_threshold'] = df2['winning_scores'] >= df2['score_threshold']
+        
     df2.pop('score_threshold')
     return(df2)
     
