@@ -804,7 +804,7 @@ def main():
         target_decoys_all.loc[target_decoys_all['target_decoy'] == 'decoy', 'original_target_sequence'] = target_decoys_all_sub['original_target_sequence'].tolist()
     
     #create groups
-    df = cg.create_groups(target_decoys_all.copy(), narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
+    df, delta_mass_max = cg.create_groups(target_decoys_all.copy(), narrow_target_decoys, peptide_list, dcy_prefix, K, tops_gw, score, account_mods, any_mods, precursor_bin_width, group_thresh, adaptive, min_group_size, n_top_groups, tide_used, print_group_pi0)
     
     #e-values score things in reverse so reverse this for groupwalk
     if tide_used == 'comet' and score == 'e-value':
@@ -815,7 +815,7 @@ def main():
     
     df['q_vals'] = results[0]
     df = df.sort_values(by = ['q_vals', 'winning_scores'], ascending = [True, False])
-    df = df.drop('bins', axis = 1)
+    
     
     #report power for 1 and 5% FDR (we do this before the reporting of extra variable modifications)
     df.reset_index(drop = True, inplace = True)
@@ -856,20 +856,20 @@ def main():
             logging.info(scan_mult5.to_string())
             sys.stderr.write("Scan multiplicities among the discovered peptides at 5% FDR level: \n")
             sys.stderr.write(scan_mult5.to_string() + "\n")
-       
+    
+    df_all = df.copy()
     df = df[df['q_vals'] <= FDR_threshold]
         
     if tide_used == 'comet' and score == 'e-value':
         df['winning_scores'] = -df['winning_scores']
         
-    #changing the name of some of the features for user-readability
-    #doing this here since I still want to use more detailed names for creating discrepancies when reviewing code e.g winning_scores vs. score or winning_peptides vs. peptide
-    df.pop('all_group_ids') #I don't believe this will be needed in the output for users honestly
+        
     df_decoys = df[df['labels'] == -1].copy()
     df = df[df['labels'] == 1]
     df.pop('labels')
     
     df['originally_discovered'] = True
+    df['above_group_threshold'] = True
     
     logging.info("Reporting delta masses and variable modifications (if applicable) for each discovered peptide.")
     sys.stderr.write("Reporting delta masses and variable modifications (if applicable) for each discovered peptide. \n")
@@ -877,8 +877,13 @@ def main():
     if df.shape[0] > 0:
         df_extra = cg.create_cluster(target_decoys_all.copy(), df['winning_peptides'].copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
         df_extra['originally_discovered'] = False
-        df = pd.concat([df, df_extra])
-        
+        df_extra = cg.get_thresholds(df.copy(), df_extra.copy(), df_all.copy(), delta_mass_max, precursor_bin_width, tops_gw)
+        df = pd.concat([df, df_extra]).reset_index(drop = True)
+    
+    #I don't believe this will be needed in the output for users honestly
+    df.pop('all_group_ids') 
+    df.pop('bins')
+    
     if tide_used == 'tide':
         df = df.drop_duplicates(subset = ['file', 'scan', 'charge', 'spectrum_neutral_mass', 'winning_peptides'])
     else:
@@ -898,6 +903,7 @@ def main():
         df['best_score'] = df.groupby(['original_target_sequence']).score.transform('min')
         df = df.sort_values(by = ['best_score', 'score'], ascending = [True, True])
     df.pop('original_target_sequence')
+    df.pop('best_score')
     
     #rounding the mass differences
     df = df.round({'delta_mass':4})
@@ -933,18 +939,27 @@ def main():
     if output_dir != './':
         if os.path.isdir(output_dir):
             df.to_csv(output_dir + "/" + file_root + ".target_mods.txt", header=True, index = False, sep = '\t')
-            df[df['originally_discovered'] == True].to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
+            df_original = df[df['originally_discovered'] == True].copy()
+            df_original.pop('above_group_threshold')
+            df_original.pop('originally_discovered')
+            df_original.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
             if return_decoys:
                 df_decoys.to_csv(output_dir + "/" + file_root + ".decoy.txt", header=True, index = False, sep = '\t')
         else:
             os.mkdir(output_dir)
             df.to_csv(output_dir + "/" + file_root + ".target_mods.txt", header=True, index = False, sep = '\t')
-            df[df['originally_discovered'] == True].to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
+            df_original = df[df['originally_discovered'] == True].copy()
+            df_original.pop('above_group_threshold')
+            df_original.pop('originally_discovered')
+            df_original.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
             if return_decoys:
                 df_decoys.to_csv(output_dir + "/" + file_root + ".decoy.txt", header=True, index = False, sep = '\t')
     else:
         df.to_csv(output_dir + "/" + file_root + ".target_mods.txt", header=True, index = False, sep = '\t')
-        df[df['originally_discovered'] == True].to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
+        df_original = df[df['originally_discovered'] == True].copy()
+        df_original.pop('above_group_threshold')
+        df_original.pop('originally_discovered')
+        df_original.to_csv(output_dir + "/" + file_root + ".target.txt", header=True, index = False, sep = '\t')
         if return_decoys:
                 df_decoys.to_csv(output_dir + "/" + file_root + ".decoy.txt", header=True, index = False, sep = '\t')
         

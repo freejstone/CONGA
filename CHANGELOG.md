@@ -1,4 +1,14 @@
-### v3.0.0
+#Releases
+
+### v3.0.3
+
+- Added a column that indicates whether the additionally reported PSMs exceed their corresponding group threshold.
+
+### v3.0.2
+
+- Fixed a small bug related to printing when no discoveries are made.
+
+### v3.0.1
 
 - Reverted dynamic level competition so that it is done on stem sequence.
 - Added reporting feature of delta masses and variable mods of discovered peptides.

@@ -662,10 +662,15 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     target_decoys.reset_index(drop = True, inplace = True)
     #now doing h2h competition
     if tide_used == 'tide' or tide_used == 'comet':
-        target_decoys['scan_plus_seq'] = target_decoys['scan'].astype(str) + ' ' + target_decoys['charge'].astype(str) + ' ' + target_decoys['spectrum_neutral_mass'].astype(str) + ' ' + target_decoys['sequence']
-        narrow_target_decoys.reset_index(drop = True, inplace = True)
-        narrow_target_decoys['scan_plus_seq'] = narrow_target_decoys['scan'].astype(str) + ' ' + narrow_target_decoys['charge'].astype(str) + ' ' + narrow_target_decoys['spectrum_neutral_mass'].astype(str) + ' ' + narrow_target_decoys['sequence']
-        
+        if tide_used == 'comet':
+            target_decoys['scan_plus_seq'] = target_decoys['scan'].astype(str) + ' ' + target_decoys['charge'].astype(str) + ' ' + target_decoys['spectrum_neutral_mass'].astype(str) + ' ' + target_decoys['sequence']
+            narrow_target_decoys.reset_index(drop = True, inplace = True)
+            narrow_target_decoys['scan_plus_seq'] = narrow_target_decoys['scan'].astype(str) + ' ' + narrow_target_decoys['charge'].astype(str) + ' ' + narrow_target_decoys['spectrum_neutral_mass'].astype(str) + ' ' + narrow_target_decoys['sequence']
+        else:
+           target_decoys['scan_plus_seq'] = target_decoys['file'].astype(str) + ' ' + target_decoys['scan'].astype(str) + ' ' + target_decoys['charge'].astype(str) + ' ' + target_decoys['spectrum_neutral_mass'].astype(str) + ' ' + target_decoys['sequence']
+           narrow_target_decoys.reset_index(drop = True, inplace = True)
+           narrow_target_decoys['scan_plus_seq'] = narrow_target_decoys['file'].astype(str) + ' ' + narrow_target_decoys['scan'].astype(str) + ' ' + narrow_target_decoys['charge'].astype(str) + ' ' + narrow_target_decoys['spectrum_neutral_mass'].astype(str) + ' ' + narrow_target_decoys['sequence']
+           
         #translating into an iterable
         unique_scan_seq_td_narrow = set(narrow_target_decoys['scan_plus_seq'])
         check_1 = all(target_decoys.database[target_decoys['scan_plus_seq'].isin(unique_scan_seq_td_narrow)] == 'narrow')
@@ -900,7 +905,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix 
     #logging.info("Constructing groups is complete.")
     #sys.stderr.write("Constructing groups is complete.\n")   
     
-    return(df)
+    return(df, delta_mass_max)
 ###############################################################################     
 def add_modification_to_amino_acid(df, static_mods):
     '''
@@ -1164,3 +1169,42 @@ def create_cluster(target_decoys, original_target_discoveries, dcy_prefix, score
         df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence), columns = ['winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence'])
     
     return(df_extra)
+###############################################################################
+def get_thresholds(df1, df2, df_all, delta_mass_max, precursor_bin_width, tops_gw):
+    
+    #need to determine the smallest score value for each group
+    min_qs = df1.groupby('all_group_ids').agg({'winning_scores': 'min'}).copy()
+    
+    #need to get bin values for df2
+    breaks_p = np.arange(0, delta_mass_max + 2*precursor_bin_width, precursor_bin_width) - precursor_bin_width/2
+    breaks_n = list(reversed(-breaks_p))
+    breaks = pd.Series(breaks_n[0:(len(breaks_n) - 1)] + list(breaks_p), name = 'bins')
+    digitized = np.digitize(df2['delta_mass'], breaks)
+    df2['bins'] = digitized
+    
+    #need to get correspondence between bins and groups
+    table_top1 = df_all[(df_all['rank'] == 1) & (df_all['database'] == 'open')].groupby(['bins']).apply(lambda x: x.all_group_ids.unique()[0])
+    table_top2 = df_all[(df_all['rank'] == 1) & (df_all['database'] == 'open') & (df_all['all_group_ids'] != 'left over group')].groupby(['bins']).apply(lambda x: x.all_group_ids.unique()[0])
+    
+    df2['all_group_ids'] = 'NA'
+    df2.loc[(df2.database == 'narrow'), 'all_group_ids'] = 'narrow' #assigning narrow group
+    
+    #assigning top1 open PSMs in the same way as they were originally created
+    df2.loc[(df2['rank'] == 1) & (df2.database == 'open') & (df2['bins'].isin(table_top1.index)), 'all_group_ids'] = df2[(df2['rank'] == 1) & (df2.database == 'open') & (df2['bins'].isin(table_top1.index))].apply(lambda x: table_top1[x['bins']], axis = 1)
+    
+    #remaining top1's go to left over group, this can happen if one of the PSMs doesn't appear in df_all since we "collapse" to stem form
+    df2.loc[(df2['rank'] == 1) & (df2.database == 'open') & (df2['all_group_ids'] == 'NA'), 'all_group_ids'] = 'left over group'
+    
+    #assiging top>1 open PSMs in the same way as they were originally created
+    df2.loc[(df2['rank'].isin(range(2, tops_gw + 1))) & (df2['bins'].isin(table_top2.index)), 'all_group_ids'] = 'top 2 or more PSMs'
+    
+    #remaining top>1 open PSMs do not get assigned a group label
+    df2['score_threshold'] = np.Inf
+    df2.loc[df2['all_group_ids'] != 'NA', 'score_threshold'] = df2[df2['all_group_ids'] != 'NA'].apply(lambda x: min_qs.loc[x['all_group_ids']], axis = 1).winning_scores
+    
+    df2['above_group_threshold'] = df2['winning_scores'] >= df2['score_threshold']
+    
+    df2.pop('score_threshold')
+    return(df2)
+    
+    
