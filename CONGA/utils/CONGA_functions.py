@@ -1186,8 +1186,8 @@ def get_thresholds(df1, df2, df_all, delta_mass_max, precursor_bin_width, tops_g
     df2['bins'] = digitized
     
     #need to get correspondence between bins and groups
-    table_top1 = df_all[(df_all['rank'] == 1) & (df_all['database'] == 'open')].groupby(['bins']).apply(lambda x: x.all_group_ids.unique()[0])
-    table_top2 = df_all[(df_all['rank'] == 1) & (df_all['database'] == 'open') & (df_all['all_group_ids'] != 'left over group')].groupby(['bins']).apply(lambda x: x.all_group_ids.unique()[0])
+    table_top1 = df_all[(df_all['rank'] == 1) & (df_all['database'] == 'open')].groupby(['bins']).apply(lambda x: x.all_group_ids.unique()[0] if len(x.all_group_ids.unique()) > 0 else '')
+    table_top2 = df_all[(df_all['rank'] == 1) & (df_all['database'] == 'open') & (df_all['all_group_ids'] != 'left over group')].groupby(['bins']).apply(lambda x: x.all_group_ids.unique()[0] if len(x.all_group_ids.unique()) > 0 else '')
     
     df2['all_group_ids'] = 'NA'
     df2.loc[(df2.database == 'narrow'), 'all_group_ids'] = 'narrow' #assigning narrow group
