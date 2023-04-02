@@ -999,10 +999,24 @@ def reverse_sequence(sequence, modifications):
                 calc_n_term_mass_mod = str(calc_n_term_mass_mod_list[0])
                 results[0] = results[0].replace('[' + calc_n_term_mass_mod + ']', '', 1)
     
+    if '_C' in modifications:
+        c_term_mass_mod_list = re.findall(r"(\d+.\d+)_C", modifications)
+        if len(c_term_mass_mod_list) > 0:
+            c_term_mass_mod = float(c_term_mass_mod_list[0])
+            masses_on_c_term = re.findall(r"(\d+.\d+)", results[-1])
+            calc_c_term_mass_mod_list = [float(m) for m in masses_on_c_term if abs(float(m) - c_term_mass_mod) <= 10e-3]
+            if len(calc_c_term_mass_mod_list) > 0:
+                calc_c_term_mass_mod = str(calc_c_term_mass_mod_list[0])
+                results[-1] = results[-1].replace('[' + calc_c_term_mass_mod + ']', '', 1)
+    
+    
     results = results[-2::-1] + [results[-1]]
     
     if '_N' in modifications:
         results[0] = results[0] + '[' + calc_n_term_mass_mod + ']'
+        
+    if '_C' in modifications:
+        results[-1] = results[-1] + '[' + calc_c_term_mass_mod + ']'
     
     results = ''.join(results)
     return(results)
