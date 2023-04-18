@@ -17,6 +17,9 @@ import logging
 import re
 import pandas as pd
 import numpy as np
+from pyteomics import mass
+sys.path.append('/Users/jfre0619/pyAscore')
+import pyascore
 from matplotlib import pyplot as plt
 from CONGA.utils import CONGA_functions as cg
 from . import version
@@ -81,7 +84,46 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
                           variable modification, or not.
                           Default = T.
                           
-    --isolation_window <value>    The left and right isolation window offsets
+    --spectrum_file <string>        File path to spectrum for susbsequent localization
+                                    of identified peptides via pyAscore.
+                                    Default = None.
+                                    
+    --mods_to_localize <string>     Of the form X:[+-]A where X is the amino acid.
+                                    A is the absolute mass shift in Daltons.
+                                    [+-] indicates whether the mass shift is
+                                    positive or negative. pyAscore will be used to
+                                    isolate the most-likely site containing
+                                    the modification. List mods in comma
+                                    separated format, e.g.
+                                    STY:79.966331,M:15.9949.
+    
+    --mz_error <value>              Tolerance in mz for deciding whether a spectral
+                                    peak matches to a theoretical peak. Used in pyascore
+                                    and filtering for neighbors.
+                                    Default = 0.05
+                                    
+    --mods_for_correction <string>  Variable modifications used during MS/MS search. 
+                                    Often the mass of a modification is rounded in the
+                                    output file.
+                                    
+                                    Of the form X:[+-]A where X is the amino acid,
+                                    or rather "cterm" or "nterm" if it is a
+                                    modification on the C-terminal or N-terminal.
+                                    A is the absolute mass shift in Daltons.
+                                    [+-] indicates whether the mass shift is
+                                    positive or negative. C+57.02146 is always
+                                    included by default. Variable modifications
+                                    do not need specification (they are accounted
+                                    for via the search files). List mods in comma
+                                    separated format, e.g.
+                                    nterm:10,cterm:-20,L:50.
+                                    
+                                    If left unspecified, the rounded variable mods
+                                    in the search files will be used.
+                                    
+                                    Default = None.
+                          
+    --isolation_window <value>      The left and right isolation window offsets
                                     used in tandem MS/MS. Values should be comma-
                                     separated.
                                     Default = 2,2
@@ -156,9 +198,7 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
                                 A is the absolute mass shift in Daltons.
                                 [+-] indicates whether the mass shift is
                                 positive or negative. C+57.02146 is always
-                                included by default. Variable modifications
-                                do not need specification (they are accounted
-                                for via the search files). List mods in comma
+                                included by default. List mods in comma
                                 separated format, e.g.
                                 nterm:10,cterm:-20,L:50.
                                 Default = None.
@@ -184,27 +224,8 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
             
 """
 ###############################################################################
-aa_table = pd.DataFrame({
-    71.037114: 'A',
-   103.009184: 'C',
-   115.026943: 'D',
-   129.042593: 'E',
-   147.068414: 'F',
-    57.021464: 'G',
-   137.058912: 'H',
-   113.084064: 'I, L',
-   128.094963: 'K',
-   131.040485: 'M',
-   114.042927: 'N',
-    97.052764: 'P',
-   128.058578: 'Q',
-   156.101111: 'R',
-    87.032028: 'S',
-   101.047668: 'T',
-    99.068414: 'V',
-   186.079313: 'W',
-   163.063329: 'Y',
-    }.items(), columns = ['mass', 'aa'])
+aa_table = pd.DataFrame(mass.std_aa_mass.items(), columns = ['aa', 'mass'])
+aa_table = aa_table.groupby('mass').agg({'aa': ', '.join}).reset_index()
 ###############################################################################
 def print_info(command_line, output_dir, file_root, overwrite, account_mods, search_file_narrow, search_file_open):
     #check if output directory exists, if not create and store log file there.
@@ -339,6 +360,10 @@ def main():
     overwrite = False
     seed = None
     get_q = False
+    spectrum_files = None
+    mods_to_localize = None
+    mz_error = 0.05
+    mods_for_correction = None
     
     command_line = ' '.join(sys.argv)
     
@@ -415,6 +440,9 @@ def main():
         elif (next_arg == "--thresh"):
             thresh = float(sys.argv[0])  
             sys.argv = sys.argv[1:]
+        elif (next_arg == "--mz_error"):
+            mz_error = float(sys.argv[0])  
+            sys.argv = sys.argv[1:]
         elif (next_arg == "--return_filt_search"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
                 return_filt_search = True
@@ -445,6 +473,12 @@ def main():
         elif (next_arg == "--static_mods"):
             static_mods = cg.parse_static_mods(sys.argv[0])
             sys.argv = sys.argv[1:]
+        elif (next_arg == "--mods_to_localize"):
+            mods_to_localize = cg.parse_mods_of_interest(sys.argv[0])
+            sys.argv = sys.argv[1:]
+        elif (next_arg == "--mods_for_correction"):
+            mods_for_correction = cg.parse_mods_of_interest(sys.argv[0])
+            sys.argv = sys.argv[1:]
         elif (next_arg == "--return_mass_mod_hist"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
                 return_mass_mod_hist = True
@@ -456,6 +490,9 @@ def main():
             sys.argv = sys.argv[1:]
         elif (next_arg == "--dcy_prefix"):
             dcy_prefix = str(sys.argv[0])
+            sys.argv = sys.argv[1:]
+        elif (next_arg == "--spectrum_files"):
+            spectrum_files = str(sys.argv[0]).split(',')
             sys.argv = sys.argv[1:]
         elif (next_arg == "--return_decoys"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
@@ -727,7 +764,7 @@ def main():
             open_target_decoys['original_target_sequence'] = open_target_decoys['sequence']
             open_target_decoys.loc[open_target_decoys['protein_id'].str.contains(dcy_prefix), 'original_target_sequence'] = open_target_decoys[open_target_decoys['protein_id'].str.contains(dcy_prefix)].apply(lambda x: cg.reverse_sequence(x.sequence, x.modifications), axis = 1)
     
-    target_decoys_all = cg.filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh, n_processes, neighbour_remove, tide_used, static_mods)
+    target_decoys_all = cg.filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh, n_processes, neighbour_remove, tide_used, static_mods, mz_error)
       
     if tide_used == 'comet':
         target_decoys_all['check_protein'] = target_decoys_all['protein_id'].apply(lambda x: cg.del_protein(x, dcy_prefix))
@@ -905,20 +942,13 @@ def main():
     df.pop('original_target_sequence')
     df.pop('best_score')
     
-    #rounding the mass differences
-    df = df.round({'delta_mass':4})
-
     #dropping q_values
     if not get_q:
         df.pop('q_value')
         
-    #output the discovered peptides
-    logging.info("Writing peptides at user-specified FDR level to directory.")
-    sys.stderr.write("Writing peptides at user-specified FDR level to directory. \n")
-    
     for aa in static_mods.keys():
-        if aa == 'I' or aa == 'L': #Problem if someone uses two different static mods for I and L
-            get_indices = aa_table.mass[aa_table.aa == 'I, L'].index
+        if aa == 'I' or aa == 'L' or aa == 'J': #Problem if someone uses two different static mods for I and L
+            get_indices = aa_table.mass[aa_table.aa == 'L, I, J'].index
             if len(get_indices) > 0:
                 aa_table.mass.at[get_indices[0]] += static_mods[aa]
         else:
@@ -929,12 +959,29 @@ def main():
     #dropping flanking_aa
     if tide_used == 'tide':
         if df.shape[0] > 0:
-            df['flag'] = df.apply(cg.get_amino_acid_to_warn, axis = 1)
+            df['flag'] = df.apply(cg.get_amino_acid_to_warn, aa_table = aa_table, axis = 1)
         else:
             df['flag'] = pd.Series([], dtype = 'object')
         df.pop('flanking_aa')
     
-    df['modification_info'] = df['peptide'].apply(cg.get_modification_info)
+    df['modification_info'] = df['peptide'].apply(get_modification_info, mods_for_correction = mods_for_correction)
+    
+    df.reset_index(inplace = True, drop = True)
+    
+    if type(spectrum_files) == list:
+        spectra_parsers = {}
+        for spectrum_file in spectrum_files:
+            read_list = pyascore.spec_parsers.SpectraParser(spectrum_file, "mzML").to_list() 
+            spectra_parsers[spectrum_file] = read_list     
+       
+        df['pepscore, localized_peptide, localized_better'] = df.apply(cg.get_local, files = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = mz_error, static_mods = static_mods)
+    
+    #rounding the mass differences
+    df = df.round({'delta_mass':4})
+        
+    #output the discovered peptides
+    logging.info("Writing peptides at user-specified FDR level to directory.")
+    sys.stderr.write("Writing peptides at user-specified FDR level to directory. \n")
     
     if output_dir != './':
         if os.path.isdir(output_dir):
@@ -999,7 +1046,7 @@ def main():
         else:
             logging.info("No variable mass-modifications.")
             sys.stderr.write("No variable mass-modifications. \n")
-        
+            
     end_time = time.time()
     
     logging.info("Elapsed time: " + str(round(end_time - start_time, 2)) + " s")

@@ -13,31 +13,15 @@ from scipy import stats
 from . import peptides
 import multiprocessing
 import logging
+from pyteomics import mass
 from tqdm import tqdm
 import re
+sys.path.append('/Users/jackfreestone/pyAscore')
+import pyascore
 
 ###############################################################################
-aa_table = pd.DataFrame({
-    71.037114: 'A',
-   103.009184: 'C',
-   115.026943: 'D',
-   129.042593: 'E',
-   147.068414: 'F',
-    57.021464: 'G',
-   137.058912: 'H',
-   113.084064: 'I, L',
-   128.094963: 'K',
-   131.040485: 'M',
-   114.042927: 'N',
-    97.052764: 'P',
-   128.058578: 'Q',
-   156.101111: 'R',
-    87.032028: 'S',
-   101.047668: 'T',
-    99.068414: 'V',
-   186.079313: 'W',
-   163.063329: 'Y',
-    }.items(), columns = ['mass', 'aa'])
+aa_table = pd.DataFrame(mass.std_aa_mass.items(), columns = ['aa', 'mass'])
+aa_table = aa_table.groupby('mass').agg({'aa': ', '.join}).reset_index()
 ###############################################################################
 def parse_static_mods(my_string):
   """
@@ -48,11 +32,29 @@ def parse_static_mods(my_string):
   
   for one_mod in my_string.split(","):
     words = one_mod.split(":")
-    return_value[words[0]] = float(words[1])
+    for i in range(len(words[0])):
+        return_value[words[0][i]] = float(words[1])
+    
 
   # Add in carbamidomethylation.
   if ("C" not in return_value):
     return_value["C"] = 57.02146
+  
+  return(return_value)
+
+
+###############################################################################
+def parse_mods_of_interest(my_string):
+  """
+  Parse a mods_to_localize string (see USAGE) into a dictinoary.
+  Key = amino acid, value = mass offset
+  """
+  return_value = {}
+  
+  for one_mod in my_string.split(","):
+    words = one_mod.split(":")
+    for i in range(len(words[0])):
+        return_value[words[0][i]] = float(words[1])
   
   return(return_value)
   
@@ -205,6 +207,9 @@ def get_similarity(list1, charges1, list2, charges2, frag_bin_size = 0.05, stati
       peptide2 = list2[index2]
       num_pairs += 1
 
+      # replace J with arbitrarily I
+      peptide1 = peptide1.replace("J", "I")
+      peptide2 = peptide2.replace("J", "I")
 
       # Don't bother if they are the same peptide.
       if (peptide1.replace("I", "L") == peptide2.replace("I", "L")):
@@ -439,28 +444,28 @@ def wrapper(df, q, thresh, frag_bin_size, static_mods): #wrapper is used to upda
     q.put(1)
     return(result)
 ###############################################################################
-def filter_scan_subset(df, q, task_number, return_dict, tide_used, score, thresh, static_mods):
+def filter_scan_subset(df, q, task_number, return_dict, tide_used, score, thresh, mz_error, static_mods):
     '''
     Effectively calls a wrapper for filter_scan that can be used for multiprocessing
     '''
     if tide_used == 'tide':
         sys.stderr.write("Starting Process " + str(task_number) + " \n")
         logging.info("Starting Process " + str(task_number))
-        results = df.groupby(['file', 'scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+        results = df.groupby(['file', 'scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, mz_error, static_mods))
         results = results.sort_index(ascending = False)
         results = results.apply(pd.Series).stack().reset_index()
         return_dict[task_number] = results[0]
     elif tide_used == 'comet':
         sys.stderr.write("Starting Process " + str(task_number) + " \n")
         logging.info("Starting Process " + str(task_number))
-        results = df.groupby(['scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+        results = df.groupby(['scan', "charge", "spectrum_neutral_mass"]).apply(lambda x: wrapper(x, q, thresh, mz_error, static_mods))
         results = results.sort_index(ascending = False)
         results = results.apply(pd.Series).stack().reset_index()
         return_dict[task_number] = results[0]
     else:
         sys.stderr.write("Starting Process " + str(task_number) + " \n")
         logging.info("Starting Process " + str(task_number))
-        results = df.groupby(['scannum']).apply(lambda x: wrapper(x, q, thresh, 0.05, static_mods))
+        results = df.groupby(['scannum']).apply(lambda x: wrapper(x, q, thresh, mz_error, static_mods))
         results = results.sort_index(ascending = False)
         results = results.apply(pd.Series).stack().reset_index()
         return_dict[task_number] = results[0]
@@ -485,7 +490,7 @@ def listener(q, list_of_df, tide_used):
     
 
 ###############################################################################
-def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh = 0.05, n_processes = 1, neighbour_remove = True, tide_used = 'tide', static_mods = {'C':57.02146}):
+def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh = 0.05, n_processes = 1, neighbour_remove = True, tide_used = 'tide', static_mods = {'C':57.02146}, mz_error = 0.05):
     '''
     Parameters
     ----------
@@ -558,11 +563,11 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
     if n_processes == 1:
         tqdm.pandas()
         if tide_used == 'tide':
-            results = target_decoys_all.groupby(['file', 'scan', 'charge', 'spectrum_neutral_mass']).progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods)) #apply filtering by experimental scan
+            results = target_decoys_all.groupby(['file', 'scan', 'charge', 'spectrum_neutral_mass']).progress_apply(lambda x: filter_scan(x, thresh, mz_error, static_mods)) #apply filtering by experimental scan
         elif tide_used == 'comet':
-            results = target_decoys_all.groupby(['scan', "charge", "spectrum_neutral_mass"]).progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods)) #apply filtering by experimental scan
+            results = target_decoys_all.groupby(['scan', "charge", "spectrum_neutral_mass"]).progress_apply(lambda x: filter_scan(x, thresh, mz_error, static_mods)) #apply filtering by experimental scan
         else:
-            results = target_decoys_all.groupby(['scannum']).progress_apply(lambda x: filter_scan(x, thresh, 0.05, static_mods))  #apply filtering by experimental scan
+            results = target_decoys_all.groupby(['scannum']).progress_apply(lambda x: filter_scan(x, thresh, mz_error, static_mods))  #apply filtering by experimental scan
         
         results = results.sort_index(ascending = False)
         results = results.apply(pd.Series).stack().reset_index()
@@ -585,7 +590,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh =
         return_dict = manager.dict() #creating manager dict variable that can be used to store changes to the argument by ALL processes at the same time
         proc = multiprocessing.Process(target=listener, args=(q, list_of_df, tide_used)) 
         proc.start() #start listening for updates to manager queue
-        workers = [multiprocessing.Process(target = filter_scan_subset, args=(list_of_df[i], q, i, return_dict, tide_used, score, thresh, static_mods)) for i in range(n_processes)] #now run each of the processes
+        workers = [multiprocessing.Process(target = filter_scan_subset, args=(list_of_df[i], q, i, return_dict, tide_used, score, thresh, mz_error, static_mods)) for i in range(n_processes)] #now run each of the processes
         for worker in workers:
             worker.start()
         for worker in workers:
@@ -999,10 +1004,24 @@ def reverse_sequence(sequence, modifications):
                 calc_n_term_mass_mod = str(calc_n_term_mass_mod_list[0])
                 results[0] = results[0].replace('[' + calc_n_term_mass_mod + ']', '', 1)
     
+    if '_C' in modifications:
+        c_term_mass_mod_list = re.findall(r"(\d+.\d+)_C", modifications)
+        if len(c_term_mass_mod_list) > 0:
+            c_term_mass_mod = float(c_term_mass_mod_list[0])
+            masses_on_c_term = re.findall(r"(\d+.\d+)", results[-1])
+            calc_c_term_mass_mod_list = [float(m) for m in masses_on_c_term if abs(float(m) - c_term_mass_mod) <= 10e-3]
+            if len(calc_c_term_mass_mod_list) > 0:
+                calc_c_term_mass_mod = str(calc_c_term_mass_mod_list[0])
+                results[-1] = results[-1].replace('[' + calc_c_term_mass_mod + ']', '', 1)
+    
+    
     results = results[-2::-1] + [results[-1]]
     
     if '_N' in modifications:
         results[0] = results[0] + '[' + calc_n_term_mass_mod + ']'
+        
+    if '_C' in modifications:
+        results[-1] = results[-1] + '[' + calc_c_term_mass_mod + ']'
     
     results = ''.join(results)
     return(results)
@@ -1048,7 +1067,7 @@ def del_protein(protein, dcy_prefix):
     
     return(select_protein)
 ###############################################################################
-def get_amino_acid_to_warn(df):
+def get_amino_acid_to_warn(df, aa_table = aa_table):
     '''
     Parameters
     ----------
@@ -1066,14 +1085,14 @@ def get_amino_acid_to_warn(df):
     flanking = df.flanking_aa
     abs_mass_diff = abs(mass_diff)
     diff_diff = abs_mass_diff - aa_table.mass
-    get_indices = aa_table.mass[abs(diff_diff) <= 0.2].index
+    get_indices = aa_table.mass[abs(diff_diff) <= 0.05].index
     if len(get_indices) > 0:
         get_index = get_indices[0]
         get_aa = aa_table.aa[get_index]
         if mass_diff > 0:
-            if (get_aa != 'I, L') and (get_aa in flanking):
+            if (get_aa != 'L, I, J') and (get_aa in flanking):
                 message = 'Possible addition of ' + get_aa
-            elif (get_aa == 'I, L') and ('I' in flanking or 'L' in flanking):
+            elif (get_aa == 'L, I, J') and ('I' in flanking or 'L' in flanking or 'J' in flanking):
                 message = 'Possible addition of ' + get_aa
             else:
                 message = ''
@@ -1086,7 +1105,7 @@ def get_amino_acid_to_warn(df):
     else:
         return ''
 ###############################################################################
-def get_modification_info(peptide):
+def get_modification_info(peptide, mods_for_correction = None):
     '''
     Parameters
     ----------
@@ -1099,12 +1118,36 @@ def get_modification_info(peptide):
 
     '''
     peptide_split = re.findall(r"[^\W\d_]\[\d+.\d+\]\[\d+.\d+\]|[^\W\d_]\[\d+.\d+\]|[^\W\d_]", peptide)
-    positions = [any(char.isdigit() for char in inputString) for inputString in peptide_split]
-    positions = [str(y) for y in (np.where(positions)[0] + 1)]
-    mass_mod = re.findall(r"\[\d+.\d+\]\[\d+.\d+\]|\[\d+.\d+\]", peptide)
-    modification_info = [''.join(x) for x in zip(positions, mass_mod)]
+    
+    positions = []
+    aas = []
+    mods = []
+    for i, j in enumerate(peptide_split):
+        if any(char.isdigit() for char in j):
+            positions.append(str(i + 1))
+            aas.append(j[0])
+            mods.append((j[1:].replace('][', ',').replace(']', '').replace('[', '').split(',')))
+    
+    if type(mods_for_correction) == dict: #replaces the rounded version for the accurate version
+        for i, aa in enumerate(aas):
+
+            if positions[i] == '1' and 'nterm' in mods_for_correction:
+                for j in range(len(mods[i])):    
+                    if abs(float(mods[i][j]) - mods_for_correction['nterm']) < 2*10**-len(mods[i][j].split(".")[1]): #note possible ambiguity if someone gives two modifications that coincide on the same amino acid that are really close...
+                        mods[i][j] = str(mods_for_correction['nterm'])
+
+            if positions[i] == str(len(peptide_split)) and 'cterm' in mods_for_correction:
+                for j in range(len(mods[i])):    
+                    if abs(float(mods[i][j]) - mods_for_correction['cterm']) < 2*10**-len(mods[i][j].split(".")[1]):
+                        mods[i][j] = str(mods_for_correction['cterm'])
+            
+            if aa in mods_for_correction:
+                if abs(float(mods[i][0]) - mods_for_correction[aa]) < 2*10**-len(mods[i][0].split(".")[1]):
+                    mods[i][0] = str(mods_for_correction[aa]) 
+    
+    mods = [','.join(mod).join('[]') for mod in mods]
+    modification_info = [''.join(x) for x in zip(positions, mods)]
     modification_info = ','.join(modification_info)
-    modification_info = modification_info.replace('][', ',')
     return(modification_info)
 ###############################################################################
 def create_cluster(target_decoys, original_target_discoveries, dcy_prefix, score, tops, tide_used, isolation_window):
@@ -1215,5 +1258,119 @@ def get_thresholds(df1, df2, df_all, delta_mass_max, precursor_bin_width, tops_g
         
     df2.pop('score_threshold')
     return(df2)
+
+
+###############################################################################
+def get_local(df, files, mods, isolation_window, mz_error = 0.05, static_mods = {'C': 57.02146}):
+    scan = df.scan
+    dm = df.delta_mass
+    charge = df.charge
+    peptide = re.sub('\\[\\d+\\]|\\[\\d+.\\d+\\]', '', df.peptide)
+    if 'file' in df.columns:
+        file = df.file
+    else:
+        file = None
+        
+    psm_mod_positions = {}
+    if any(aa in peptide for aa in static_mods):
+        for aa in static_mods.keys():
+            for pos, char in enumerate(peptide):
+                if char == aa:
+                    if pos + 1 in psm_mod_positions:
+                        psm_mod_positions[pos + 1] += static_mods[aa]
+                    else:
+                        psm_mod_positions[pos + 1] = static_mods[aa]
+            
+    if 'nterm' in static_mods:
+        if 1 in psm_mod_positions:
+            psm_mod_positions[1] += static_mods['nterm']
+        else:
+            psm_mod_positions[1] = static_mods['nterm']
+        
+    if 'cterm' in static_mods:
+        if len(peptide) in psm_mod_positions:
+            psm_mod_positions[len(peptide)] += static_mods['cterm']
+        else:
+            psm_mod_positions[len(peptide)] = static_mods['cterm']
+    
+    mod_info = df.modification_info.split('],')
+    mod_info = [mod + ']' if i < len(mod_info) - 1 else mod for i, mod in enumerate(mod_info)]
+    
+    for i in mod_info:
+        pos = int(i.split('[')[0])
+        if pos in psm_mod_positions:
+            psm_mod_positions[pos] += sum(float(j) for j in re.search('\[(.*)\]', i).group(1).split(','))
+        else:
+            psm_mod_positions[pos] = sum(float(j) for j in re.search('\[(.*)\]', i).group(1).split(','))
+    
+    pepscore = -np.inf
+    localized_peptide = None
+    
+    for aa in mods.keys():
+    
+        mod_check = ((dm - mods[aa]) <= isolation_window[0]*charge) or ((dm - mods[aa]) >= isolation_window[1]*charge)
+        
+        if mod_check:
+            #doing pyascore for provided modification
+            ascore = pyascore.PyAscore(bin_size=100., n_top=10,
+                              mod_group=aa,
+                              mod_mass=mods[aa],
+                              mz_error=mz_error)
+            
+        spectrum = files[file][scan]
+        aux_mod_pos = np.fromiter(psm_mod_positions.keys(), dtype=np.uint32)
+        aux_mod_masses = np.fromiter(psm_mod_positions.values(), dtype=np.float32)
+        
+        ascore.score(mz_arr = spectrum["mz_values"],
+                     int_arr = spectrum["intensity_values"],
+                     peptide = peptide,
+                     n_of_mod = 1,
+                     max_fragment_charge = charge - 1,
+                     aux_mod_pos = aux_mod_pos,
+                     aux_mod_mass = aux_mod_masses)
+        
+        if ascore.best_score > pepscore:
+            localized_peptide = ascore.best_sequence
+            pepscore = ascore.best_score
+            
+    #doing pyascore for observed modification
+    ascore = pyascore.PyAscore(bin_size=100., n_top=10,
+                      mod_group="".join(set(peptide)),
+                      mod_mass=dm,
+                      mz_error=mz_error)
+    
+    ascore.score(mz_arr = spectrum["mz_values"],
+                 int_arr = spectrum["intensity_values"],
+                 peptide = peptide,
+                 n_of_mod = 1,
+                 max_fragment_charge = charge - 1,
+                 aux_mod_pos = aux_mod_pos,
+                 aux_mod_mass = aux_mod_masses)
+    
+    if ascore.best_score > pepscore:
+        localized_peptide = ascore.best_sequence
+        pepscore = ascore.best_score
+        
+    #pyascore for null modification
+    ascore = pyascore.PyAscore(bin_size=100., n_top=10,
+                      mod_group=peptide[0],
+                      mod_mass=[0],
+                      mz_error=mz_error)
+    
+    ascore.score(mz_arr = spectrum["mz_values"],
+                 int_arr = spectrum["intensity_values"],
+                 peptide = peptide,
+                 n_of_mod = 1,
+                 max_fragment_charge = charge - 1,
+                 aux_mod_pos = aux_mod_pos,
+                 aux_mod_mass = aux_mod_masses)
+    
+    if pepscore > ascore.best_score:
+        localized_better = True
+    else:
+        localized_better = False    
+        
+    return(pepscore, localized_peptide, localized_better)
+    
     
     

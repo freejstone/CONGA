@@ -24,6 +24,7 @@ def test_reverse_sequence():
 def test_parse_static_mods():
     assert cg.parse_static_mods('S:+79.345') == {'S': 79.345, 'C': 57.02146}
     assert cg.parse_static_mods('S:+79.345,nterm:30.987,cterm:-53.135') == {'S': 79.345, 'nterm': 30.987, 'cterm': -53.135, 'C': 57.02146}
+    assert cg.parse_static_mods('S:+79.345,nterm:30.987,cterm:-53.135') == {'S': 79.345, 'nterm': 30.987, 'cterm': -53.135, 'C': 57.02146}
 
 def test_parse_mods():
     assert cg.parse_mods('A[1.2345]BCD', {'S': 79.345}) == (['A', 'B', 'C', 'D'], [1.2345, 0.0, 0.0, 0.0], 0.0, 0.0)
@@ -69,18 +70,23 @@ def test_check_n_term():
     
 def test_del_protein():
     dcy_prefix = 'decoy_'
-    cg.del_protein('decoy_PROTEIN1, PROTEIN2', dcy_prefix) == True
-    cg.del_protein('decoy_PROTEIN1', dcy_prefix) == False
-    cg.del_protein('PROTEIN3, PROTEIN4', dcy_prefix) == False
-    cg.del_protein('PROTEIN5, decoy_PROTEIN6', dcy_prefix) == True
+    assert cg.del_protein('decoy_PROTEIN1, PROTEIN2', dcy_prefix) == True
+    assert cg.del_protein('decoy_PROTEIN1', dcy_prefix) == False
+    assert cg.del_protein('PROTEIN3, PROTEIN4', dcy_prefix) == False
+    assert cg.del_protein('PROTEIN5, decoy_PROTEIN6', dcy_prefix) == True
 
 def test_get_amino_acid_to_warn():
     delta_mass = pd.Series([128.094963, -114.03])
     peptide = pd.Series(['ABCD', 'ABCD[13.1]N'])
     flanking_aa = pd.Series(['KT', 'RA'])
     df = pd.DataFrame(zip(delta_mass, peptide, flanking_aa), columns = ['delta_mass', 'peptide', 'flanking_aa'])
-    df.apply(cg.get_amino_acid_to_warn, axis = 1) == pd.Series(['Possible addition of K', 'Possible loss of N'])
+    assert df.apply(cg.get_amino_acid_to_warn, axis = 1) == pd.Series(['Possible addition of K', 'Possible loss of N'])
     
 def test_get_modification_info():
-    cg.get_modification_info('A[10.1]BCD[15.333]EF') == '1[10.1],4[15.333]'
-    cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF') == '1[10.1,1.2345],4[15.333]'
+    assert cg.get_modification_info('A[10.1]BCD[15.333]EF') == '1[10.1],4[15.333]'
+    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF') == '1[10.1,1.2345],4[15.333]'
+    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF', {'A': 10.13535, 'nterm': 1.23454321}) == '1[10.13535,1.23454321],4[15.333]'
+    
+    
+    
+    

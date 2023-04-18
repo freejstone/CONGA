@@ -1,5 +1,9 @@
 #Releases
 
+### v3.0.4
+
+- Fixed minor issue regarding printing auxilary list of additional PSMs when there are no open-groups
+
 ### v3.0.3
 
 - Added a column that indicates whether the additionally reported PSMs exceed their corresponding group threshold.
