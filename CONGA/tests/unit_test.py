@@ -14,6 +14,7 @@ from CONGA.utils import CONGA_functions as cg
 import random
 import pandas as pd
 import numpy as np
+import pyascore
 
 def test_reverse_sequence():
     assert cg.reverse_sequence('ABCD', '') == 'CBAD'
@@ -87,6 +88,10 @@ def test_get_modification_info():
     assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF') == '1[10.1,1.2345],4[15.333]'
     assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF', {'A': 10.13535, 'nterm': 1.23454321}) == '1[10.13535,1.23454321],4[15.333]'
     
-    
-    
+def test_get_local():
+    df_test = pd.DataFrame(zip([32257, 35669], [3, 3], ['AGDMGNCVSGQQQEGGVSEEMKGPVQEDK', 'VEEESTGDPFGFDSDDES[79.966331]LPVSSK'], [15.98, 10], ['', '18[79.966331]'], [1.01620567, 3.24795341]), columns = ['scan', 'charge', 'peptide', 'delta_mass', 'modification_info', 'score'])
+    spectra_parsers = {'test_spectra.mzML': pyascore.spec_parsers.SpectraParser('test_spectra.mzML', "mzML").to_dict()}
+    mods_to_localize = {'M': 15.9945}
+    isolation_window = [2, 2]
+    assert type(df_test.apply(cg.get_local, axis = 1, spectra_parsers = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = 0.05, static_mods = {'C': 57.02146})) == pd.core.series.Series
     

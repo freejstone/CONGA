@@ -18,7 +18,6 @@ import re
 import pandas as pd
 import numpy as np
 from pyteomics import mass
-sys.path.append('/Users/jfre0619/pyAscore')
 import pyascore
 from matplotlib import pyplot as plt
 from CONGA.utils import CONGA_functions as cg
@@ -84,8 +83,9 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
                           variable modification, or not.
                           Default = T.
                           
-    --spectrum_file <string>        File path to spectrum for susbsequent localization
-                                    of identified peptides via pyAscore.
+    --spectrum_files <string>       File path to spectrum files in mzML format for 
+                                    susbsequent localization of identified peptides
+                                    via pyAscore. 
                                     Default = None.
                                     
     --mods_to_localize <string>     Of the form X:[+-]A where X is the amino acid.
@@ -95,7 +95,7 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
                                     isolate the most-likely site containing
                                     the modification. List mods in comma
                                     separated format, e.g.
-                                    STY:79.966331,M:15.9949.
+                                    S:79.966331,T:79.966331,M:15.9949.
     
     --mz_error <value>              Tolerance in mz for deciding whether a spectral
                                     peak matches to a theoretical peak. Used in pyascore
@@ -474,10 +474,10 @@ def main():
             static_mods = cg.parse_static_mods(sys.argv[0])
             sys.argv = sys.argv[1:]
         elif (next_arg == "--mods_to_localize"):
-            mods_to_localize = cg.parse_mods_of_interest(sys.argv[0])
+            mods_to_localize = cg.parse_static_mods(sys.argv[0], C = False)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--mods_for_correction"):
-            mods_for_correction = cg.parse_mods_of_interest(sys.argv[0])
+            mods_for_correction = cg.parse_mods_of_interest(sys.argv[0], C = False)
             sys.argv = sys.argv[1:]
         elif (next_arg == "--return_mass_mod_hist"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
@@ -964,7 +964,7 @@ def main():
             df['flag'] = pd.Series([], dtype = 'object')
         df.pop('flanking_aa')
     
-    df['modification_info'] = df['peptide'].apply(get_modification_info, mods_for_correction = mods_for_correction)
+    df['modification_info'] = df['peptide'].apply(cg.get_modification_info, mods_for_correction = mods_for_correction, axis = 1)
     
     df.reset_index(inplace = True, drop = True)
     
@@ -974,7 +974,15 @@ def main():
             read_list = pyascore.spec_parsers.SpectraParser(spectrum_file, "mzML").to_list() 
             spectra_parsers[spectrum_file] = read_list     
        
-        df['pepscore, localized_peptide, localized_better'] = df.apply(cg.get_local, files = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = mz_error, static_mods = static_mods)
+        pyascore_results = df[df.search_file == 'open'].apply(cg.get_local, spectra_parsers = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = mz_error, static_mods = static_mods)
+        pyascore_results = pd.DataFrame.from_dict(dict(zip(pyascore_results.index, pyascore_results.values))).T
+        pyascore_results.rename(columns = {0:'localized_peptide', 1:'localized_better'}, inplace = True)
+        
+        df['localized_peptide'] = df['peptide']
+        df['localized_better'] = True
+        
+        df.loc[df.search_file == open, 'localized_peptide'] = pyascore_results.localized_peptide.copy()
+        df.loc[df.search_file == open, 'localized_better'] = pyascore_results.localized_better.copy()
     
     #rounding the mass differences
     df = df.round({'delta_mass':4})
