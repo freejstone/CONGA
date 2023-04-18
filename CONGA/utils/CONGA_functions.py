@@ -1203,10 +1203,9 @@ def get_amino_acid_to_warn(df, aa_table=aa_table):
     peptide = df.peptide
     flanking = df.flanking_aa
     abs_mass_diff = abs(mass_diff)
-    diff_diff = abs_mass_diff - aa_table.mass
-    get_indices = aa_table.mass[abs(diff_diff) <= 0.05].index
-    if len(get_indices) > 0:
-        get_index = get_indices[0]
+    diff_diff = abs(abs_mass_diff - aa_table.mass)
+    get_index = diff_diff.idxmin()
+    if min(diff_diff) <= 0.05:
         get_aa = aa_table.aa[get_index]
         if mass_diff > 0:
             if (get_aa != 'L, I, J') and (get_aa in flanking):
