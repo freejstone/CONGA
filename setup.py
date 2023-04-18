@@ -29,6 +29,7 @@ setuptools.setup(
         'numpy',
         'scipy',
         'tdqm',
-        'matplotlib'
+        'matplotlib',
+        'pyascore'
     ],
 )

@@ -964,7 +964,7 @@ def main():
             df['flag'] = pd.Series([], dtype = 'object')
         df.pop('flanking_aa')
     
-    df['modification_info'] = df['peptide'].apply(cg.get_modification_info, mods_for_correction = mods_for_correction, axis = 1)
+    df['modification_info'] = df['peptide'].apply(cg.get_modification_info, mods_for_correction = mods_for_correction)
     
     df.reset_index(inplace = True, drop = True)
     
