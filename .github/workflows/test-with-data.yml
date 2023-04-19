@@ -21,4 +21,5 @@ jobs:
       - run: python3 -m CONGA --overwrite T --return_mass_mod_hist T --n_processes 3 --isolation_window 0.75,0.75 --seed 1 ./data/tide/narrow_example1.tide-search.txt ./data/tide/open_example1.tide-search.txt
       - run: python3 -m CONGA --overwrite T --dcy_prefix DECOY --score e-value --seed 1 ./data/comet/narrow_example1.comet.txt ./data/comet/open_example1.comet.txt
       - run: python3 -m CONGA --overwrite T --score hyperscore --seed 1 ./data/MS/narrow.tsv ./data/MS/open.tsv ./data/MS/tide-index.peptides.txt
+      - run: python3 -m CONGA --overwrite T --spectrum_files ./data/pyascore_test/example.mzML --seed 1 ./data/pyascore_test/narrow.txt ./data/pyascore_test/open.txt 
       - run: python -m pytest ./CONGA/tests/

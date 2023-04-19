@@ -1,5 +1,10 @@
 #Releases
 
+### v3.0.5
+
+- Included pyascore functionality.
+- Fixed a bug related to Comet when --accounts_mods T
+
 ### v3.0.4
 
 - Fixed minor issue regarding printing auxilary list of additional PSMs when there are no open-groups

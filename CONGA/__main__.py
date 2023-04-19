@@ -971,18 +971,24 @@ def main():
     if type(spectrum_files) == list:
         spectra_parsers = {}
         for spectrum_file in spectrum_files:
-            read_list = pyascore.spec_parsers.SpectraParser(spectrum_file, "mzML").to_list() 
+            read_list = pyascore.spec_parsers.SpectraParser(spectrum_file, "mzML").to_dict() #makes scans the key values
             spectra_parsers[spectrum_file] = read_list     
        
-        pyascore_results = df[df.search_file == 'open'].apply(cg.get_local, spectra_parsers = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = mz_error, static_mods = static_mods)
-        pyascore_results = pd.DataFrame.from_dict(dict(zip(pyascore_results.index, pyascore_results.values))).T
-        pyascore_results.rename(columns = {0:'localized_peptide', 1:'localized_better'}, inplace = True)
-        
+        if df.shape[0] > 0:
+            #output the discovered peptides
+            logging.info("Scoring localization of modifications using pyAscore.")
+            sys.stderr.write("Scoring localization of modifications using pyAscore. \n")
+            pyascore_results = df[df.search_file == 'open'].apply(cg.get_local, axis = 1, spectra_parsers = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = mz_error, static_mods = static_mods).copy()
+            pyascore_results = pd.DataFrame.from_dict(dict(zip(pyascore_results.index, pyascore_results.values))).T
+            pyascore_results.rename(columns = {0:'localized_peptide', 1:'localized_better', 2:'dm_used'}, inplace = True)
+            
         df['localized_peptide'] = df['peptide']
-        df['localized_better'] = True
+        df['localized_better'] = False
+        df['dm_used'] = False
         
-        df.loc[df.search_file == open, 'localized_peptide'] = pyascore_results.localized_peptide.copy()
-        df.loc[df.search_file == open, 'localized_better'] = pyascore_results.localized_better.copy()
+        df.loc[df.search_file == 'open', 'localized_peptide'] = pyascore_results.localized_peptide.copy()
+        df.loc[df.search_file == 'open', 'localized_better'] = pyascore_results.localized_better.copy()
+        df.loc[df.search_file == 'open', 'dm_used'] = pyascore_results.dm_used.copy()
     
     #rounding the mass differences
     df = df.round({'delta_mass':4})

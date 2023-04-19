@@ -1460,34 +1460,36 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
 
     pepscore = -np.inf
     localized_peptide = None
+    dm_used = False    
 
     spectrum = spectra_parsers[file][scan]
     aux_mod_pos = np.fromiter(psm_mod_positions.keys(), dtype=np.uint32)
     aux_mod_masses = np.fromiter(psm_mod_positions.values(), dtype=np.float32)
-
-    for aa in mods.keys():
-
-        mod_check = ((dm - mods[aa]) <= isolation_window[0] *
-                     charge) or ((dm - mods[aa]) >= isolation_window[1]*charge)
-
-        if mod_check:
-            #doing pyascore for provided modification
-            ascore = pyascore.PyAscore(bin_size=100., n_top=10,
-                                       mod_group=aa,
-                                       mod_mass=mods[aa],
-                                       mz_error=mz_error)
-
-            ascore.score(mz_arr=spectrum["mz_values"],
-                         int_arr=spectrum["intensity_values"],
-                         peptide=peptide,
-                         n_of_mod=1,
-                         max_fragment_charge=charge - 1,
-                         aux_mod_pos=aux_mod_pos,
-                         aux_mod_mass=aux_mod_masses)
-
-            if ascore.best_score > pepscore:
-                localized_peptide = ascore.best_sequence
-                pepscore = ascore.best_score
+    
+    if type(mods) == dict:
+        for aa in mods.keys():
+    
+            mod_check = ((dm - mods[aa]) <= isolation_window[0] *
+                         charge) or ((dm - mods[aa]) >= isolation_window[1]*charge)
+    
+            if mod_check:
+                #doing pyascore for provided modification
+                ascore = pyascore.PyAscore(bin_size=100., n_top=10,
+                                           mod_group=aa,
+                                           mod_mass=mods[aa],
+                                           mz_error=mz_error)
+    
+                ascore.score(mz_arr=spectrum["mz_values"],
+                             int_arr=spectrum["intensity_values"],
+                             peptide=peptide,
+                             n_of_mod=1,
+                             max_fragment_charge=charge - 1,
+                             aux_mod_pos=aux_mod_pos,
+                             aux_mod_mass=aux_mod_masses)
+    
+                if ascore.best_score > pepscore:
+                    localized_peptide = ascore.best_sequence
+                    pepscore = ascore.best_score
 
     #doing pyascore for observed modification
     ascore = pyascore.PyAscore(bin_size=100., n_top=10,
@@ -1499,11 +1501,12 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
                  int_arr=spectrum["intensity_values"],
                  peptide=peptide,
                  n_of_mod=1,
-                 max_fragment_charge=charge - 1,
+                 max_fragment_charge=max(1, charge - 1),
                  aux_mod_pos=aux_mod_pos,
                  aux_mod_mass=aux_mod_masses)
 
     if ascore.best_score > pepscore:
+        dm_used = True
         localized_peptide = ascore.best_sequence
         pepscore = ascore.best_score
 
@@ -1517,7 +1520,7 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
                  int_arr=spectrum["intensity_values"],
                  peptide=peptide,
                  n_of_mod=1,
-                 max_fragment_charge=charge - 1,
+                 max_fragment_charge=max(1, charge - 1),
                  aux_mod_pos=aux_mod_pos,
                  aux_mod_mass=aux_mod_masses)
 
@@ -1526,4 +1529,4 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
     else:
         localized_better = False
 
-    return([localized_peptide, localized_better])
+    return([localized_peptide, localized_better, dm_used])

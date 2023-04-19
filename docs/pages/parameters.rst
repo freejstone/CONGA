@@ -12,6 +12,7 @@ Neighbor filtration
 * ``--neighbour_remove <T|F>``: If true, for each scan, we successively move down the list of PSMs associated with each scan, ordered in terms of the score from highest to lowest,  and compute a similarity score between the current peptide and the previous peptide(s). If one of the similarity score(s) exceeds a certain threshold, then the PSM associated with the current peptide is thrown out, and we proceed to the next.
 * ``--thresh <float>``: The similarity score used as a threshold to filter out neighbouring peptides. Default = 0.05.
 * ``--return_filt_search <T|F>``:  Whether or not to return filtered narrow and open search files. Default = F.
+* ``--mz_error <float>``: Tolerance in mz for deciding whether two peaks are matched. Also used during pyascoring for localization of modifications. Default = 0.05.
 
 -------------------------
 Dynamic-level competition
@@ -35,6 +36,14 @@ Group-walk algorithm
 
 * ``--K <integer>``: The number of recently observed peptides used to estimate the probability that the next peptide is a target or decoy. Default = 40.
 * ``--FDR_threshold <value>``: The FDR threshold. Default = 0.01.
+
+--------------------
+Localization scoring
+--------------------
+
+* ``--spectrum_files <string>``: Comma-separated file paths to the mzML spectrum files used during the original MS/MS search. If not specified, localized scoring using pyAscore is not conducted. File path needs to exactly match the file path used during Tide Search/Comet, as these searches produce a file column which is what is used to correctly match the scan number used in CONGA to the scan number if the spectrum files. MS-Fragger does not contain a file column, so it is assumed just a single spectrum file was used. Default = None.
+* ``--mods_to_localize <string>``: Of the form X:[+-]A where X is the amino acid. A is the absolute mass shift in Daltons. [+-] indicates whether the mass shift is positive or negative. pyAscore will be used to isolate the most-likely site containing the modification using the user-supplied modifications if the observed delta mass is reasonably close (up to to the isolation window). Else, the observed delta mass is uesd for localization instead or if it produces a better score. Default = None. List mods in comma-separated format, e.g. S:79.966331,T:79.966331,M:15.9949.
+* ``--mods_for_correction <string>``: Variable modifications used during MS/MS search. Often the mass of a modification is rounded in the output file from an MS/MS search. This just allows these rounded modifications to be replaced by more accurate values so when it comes to localized scoring via pyAscore, the errors associated to the rounded masses do not compound if several variable modifications exist on a single peptide. Specify the modifications in the same way as the ``--static_mods`` option below. Default = None.
 
 -------------
 CPU processes
