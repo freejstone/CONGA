@@ -9,7 +9,8 @@ Testing primarily utility/helper functions used in CONGA.py. Overall testing is 
 that the CONDA modules completes successfully using a few example data sets via Github actions.
 
 """
-
+from pyteomics.auxiliary import file_helpers as fh
+fh._QUEUE_SIZE = 32767
 from CONGA.utils import CONGA_functions as cg
 import random
 import pandas as pd

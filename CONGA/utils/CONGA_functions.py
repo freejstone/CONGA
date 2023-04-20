@@ -5,6 +5,8 @@ Created on Mon Jan 23 15:24:39 2023
 
 @author: jackfreestone
 """
+from pyteomics.auxiliary import file_helpers as fh
+fh._QUEUE_SIZE = 32767
 import pyascore
 import sys
 import pandas as pd

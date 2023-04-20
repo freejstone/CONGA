@@ -7,6 +7,8 @@ Created on Thu Jun 16 15:27:59 2022
 
 #Code that executes the group-walk algorithm
 """
+from pyteomics.auxiliary import file_helpers as fh
+fh._QUEUE_SIZE = 32767
 import os 
 import time
 import datetime
