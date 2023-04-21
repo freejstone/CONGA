@@ -1445,7 +1445,11 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
             psm_mod_positions[len(peptide)] += static_mods['cterm']
         else:
             psm_mod_positions[len(peptide)] = static_mods['cterm']
-
+    
+    mod_info = None
+    
+    variable_mods = {}
+    
     if df.modification_info != '':
         mod_info = df.modification_info.split('],')
         mod_info = [mod + ']' if i <
@@ -1459,10 +1463,14 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
             else:
                 psm_mod_positions[pos] = sum(
                     float(j) for j in re.search('\[(.*)\]', i).group(1).split(','))
+                
+            variable_mods[pos] = re.search('\[(.*)\]', i).group(1)
 
     pepscore = -np.inf
     localized_peptide = None
-    dm_used = False    
+    dm_used = False
+    localized_pos = None
+    localized_mass = None
 
     spectrum = spectra_parsers[file][scan]
     aux_mod_pos = np.fromiter(psm_mod_positions.keys(), dtype=np.uint32)
@@ -1474,7 +1482,7 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
             mod_check = ((dm - mods[aa]) <= isolation_window[0] *
                          charge) or ((dm - mods[aa]) >= isolation_window[1]*charge)
     
-            if mod_check:
+            if mod_check and aa in peptide:
                 #doing pyascore for provided modification
                 ascore = pyascore.PyAscore(bin_size=100., n_top=10,
                                            mod_group=aa,
@@ -1490,6 +1498,10 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
                              aux_mod_mass=aux_mod_masses)
     
                 if ascore.best_score > pepscore:
+                    localized_mass = mods[aa]
+                    signature = ascore.pep_scores[0]['signature']
+                    signature_pos = signature.argmax()
+                    localized_pos = len(peptide.split(aa, signature_pos + 1)[0]) + 1
                     localized_peptide = ascore.best_sequence
                     pepscore = ascore.best_score
 
@@ -1508,6 +1520,10 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
                  aux_mod_mass=aux_mod_masses)
 
     if ascore.best_score > pepscore:
+        localized_mass = dm
+        signature = ascore.pep_scores[0]['signature']
+        signature_pos = signature.argmax()
+        localized_pos = signature_pos + 1
         dm_used = True
         localized_peptide = ascore.best_sequence
         pepscore = ascore.best_score
@@ -1530,5 +1546,19 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
         localized_better = True
     else:
         localized_better = False
+    
+    if mod_info == None:
+        modification_info = str(localized_pos) + '[' + str(localized_mass) + ']'
+    else:
+        if localized_pos not in variable_mods:    
+            mod_info.append(str(localized_pos) + '[' + str(localized_mass) + ']')
+            modification_info = ','.join(mod_info)
+        else:
+            variable_mods[localized_pos] += ',' + str(localized_mass)
+            modification_info = []
+            for pos in variable_mods:
+                modification_info.append(str(pos) + '[' + variable_mods[pos] + ']')
+            modification_info = ','.join(modification_info)
+        
 
-    return([localized_peptide, localized_better, dm_used])
+    return([localized_peptide, localized_better, dm_used, modification_info])
