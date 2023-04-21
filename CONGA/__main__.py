@@ -106,7 +106,9 @@ USAGE = """USAGE: python3 -m CONGA [options] <narrow> <wide> <matching>
                                     
     --mods_for_correction <string>  Variable modifications used during MS/MS search. 
                                     Often the mass of a modification is rounded in the
-                                    output file.
+                                    output file. Providing the variable modifications
+                                    here ensures that the rounded versions are replaced
+                                    for the more precise masses.
                                     
                                     Of the form X:[+-]A where X is the amino acid,
                                     or rather "cterm" or "nterm" if it is a
@@ -982,7 +984,7 @@ def main():
             sys.stderr.write("Scoring localization of modifications using pyAscore. \n")
             pyascore_results = df[df.search_file == 'open'].apply(cg.get_local, axis = 1, spectra_parsers = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = mz_error, static_mods = static_mods).copy()
             pyascore_results = pd.DataFrame.from_dict(dict(zip(pyascore_results.index, pyascore_results.values))).T
-            pyascore_results.rename(columns = {0:'localized_peptide', 1:'localized_better', 2:'dm_used'}, inplace = True)
+            pyascore_results.rename(columns = {0:'localized_peptide', 1:'localized_better', 2:'dm_used', 3:'modification_info'}, inplace = True)
             
         df['localized_peptide'] = df['peptide']
         df['localized_better'] = False
