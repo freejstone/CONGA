@@ -94,7 +94,7 @@ def test_get_modification_info():
 def test_get_local():
     df_test = pd.DataFrame(zip([32257, 35669], [3, 3], ['AGDMGNCVSGQQQEGGVSEEMKGPVQEDK', 'VEEESTGDPFGFDSDDES[79.966331]LPVSSK'], [15.98, 10], ['', '18[79.966331]'], [1.01620567, 3.24795341]), columns = ['scan', 'charge', 'peptide', 'delta_mass', 'modification_info', 'score'])
     spectra_parsers = {'./CONGA/tests/test_spectra.mzML': pyascore.spec_parsers.SpectraParser('./CONGA/tests/test_spectra.mzML', "mzML").to_dict()}
-    mods_to_localize = {'M': 15.9945}
+    mods_to_localize = pd.DataFrame(zip(['M', 'M'], [15.9945, 23]), columns = ['aa', 'mass'])
     isolation_window = [2, 2]
     assert type(df_test.apply(cg.get_local, axis = 1, spectra_parsers = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = 0.05, static_mods = {'C': 57.02146})) == pd.core.series.Series
     
