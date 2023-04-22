@@ -978,7 +978,7 @@ def main():
             read_list = pyascore.spec_parsers.SpectraParser(spectrum_file, "mzML").to_dict() #makes scans the key values
             spectra_parsers[spectrum_file] = read_list     
        
-        if df.shape[0] > 0:
+        if df[df.search_file == 'open'].shape[0] > 0:
             #output the discovered peptides
             logging.info("Scoring localization of modifications using pyAscore.")
             sys.stderr.write("Scoring localization of modifications using pyAscore. \n")
