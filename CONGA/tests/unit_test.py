@@ -96,5 +96,5 @@ def test_get_local():
     spectra_parsers = {'./CONGA/tests/test_spectra.mzML': pyascore.spec_parsers.SpectraParser('./CONGA/tests/test_spectra.mzML', "mzML").to_dict()}
     mods_to_localize = pd.DataFrame(zip(['M', 'M'], [15.9945, 23]), columns = ['aa', 'mass'])
     isolation_window = [2, 2]
-    assert type(df_test.apply(cg.get_local, axis = 1, spectra_parsers = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = 0.05, static_mods = {'C': 57.02146})) == pd.core.series.Series
+    assert type(df_test.apply(cg.get_local, axis = 1, spectra_parsers = spectra_parsers, mods_to_localize = mods_to_localize, isolation_window = isolation_window, mz_error = 0.05, static_mods = {'C': 57.02146})) == pd.core.series.Series
     
