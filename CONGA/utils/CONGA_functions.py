@@ -46,6 +46,28 @@ def parse_static_mods(my_string, C=True):
 ###############################################################################
 
 
+def parse_mods_to_localize(my_string):
+  """
+  Parse a static mod string (see USAGE) into a dictinoary.
+  Key = amino acid, value = mass offset
+  """
+  aa = []
+  mass = []
+
+  for one_mod in my_string.split(","):
+    words = one_mod.split(":")
+    aa.append(words[0])
+    mass.append(float(words[1]))
+  
+  mods_to_localize = pd.DataFrame(zip(aa, mass), columns = ['aa', 'mass'])
+
+
+  return(mods_to_localize)
+
+
+###############################################################################
+
+
 def make_binidx_matchcount_map(mzs, fragment_min_mz, fragment_max_mz, bin_size):
     """
     Utility function for calc_proportion_fragments_incommon.
@@ -1412,7 +1434,7 @@ def get_thresholds(df1, df2, df_all, delta_mass_max, precursor_bin_width, tops_g
 
 
 ###############################################################################
-def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static_mods={'C': 57.02146}):
+def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=0.05, static_mods={'C': 57.02146}):
     scan = df.scan
     dm = df.delta_mass
     charge = df.charge
@@ -1476,17 +1498,17 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
     aux_mod_pos = np.fromiter(psm_mod_positions.keys(), dtype=np.uint32)
     aux_mod_masses = np.fromiter(psm_mod_positions.values(), dtype=np.float32)
     
-    if type(mods) == dict:
-        for aa in mods.keys():
+    if type(mods_to_localize) == list:
+        for i in range(mods_to_localize.shape[0]):
     
-            mod_check = ((dm - mods[aa]) <= isolation_window[0] *
-                         charge) or ((dm - mods[aa]) >= isolation_window[1]*charge)
+            mod_check = ((dm - mods_to_localize.mass[i]) <= isolation_window[0] *
+                         charge) or ((dm - mods_to_localize.mass[i]) >= isolation_window[1]*charge)
     
-            if mod_check and aa in peptide:
+            if mod_check and mods_to_localize.aa[i] in peptide:
                 #doing pyascore for provided modification
                 ascore = pyascore.PyAscore(bin_size=100., n_top=10,
-                                           mod_group=aa,
-                                           mod_mass=mods[aa],
+                                           mod_group=mods_to_localize.aa[i],
+                                           mod_mass=mods_to_localize.mass[i],
                                            mz_error=mz_error)
     
                 ascore.score(mz_arr=spectrum["mz_values"],
@@ -1498,10 +1520,10 @@ def get_local(df, spectra_parsers, mods, isolation_window, mz_error=0.05, static
                              aux_mod_mass=aux_mod_masses)
     
                 if ascore.best_score > pepscore:
-                    localized_mass = mods[aa]
+                    localized_mass = mods_to_localize.aa[i]
                     signature = ascore.pep_scores[0]['signature']
                     signature_pos = signature.argmax()
-                    localized_pos = len(peptide.split(aa, signature_pos + 1)[0]) + 1
+                    localized_pos = len(peptide.split(mods_to_localize.aa[i], signature_pos + 1)[0]) + 1
                     localized_peptide = ascore.best_sequence
                     pepscore = ascore.best_score
 

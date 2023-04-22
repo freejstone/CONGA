@@ -478,7 +478,7 @@ def main():
             static_mods = cg.parse_static_mods(sys.argv[0])
             sys.argv = sys.argv[1:]
         elif (next_arg == "--mods_to_localize"):
-            mods_to_localize = cg.parse_static_mods(sys.argv[0], C = False)
+            mods_to_localize = cg.parse_mods_to_localize(sys.argv[0])
             sys.argv = sys.argv[1:]
         elif (next_arg == "--mods_for_correction"):
             mods_for_correction = cg.parse_mods_of_interest(sys.argv[0], C = False)
@@ -982,7 +982,7 @@ def main():
             #output the discovered peptides
             logging.info("Scoring localization of modifications using pyAscore.")
             sys.stderr.write("Scoring localization of modifications using pyAscore. \n")
-            pyascore_results = df[df.search_file == 'open'].apply(cg.get_local, axis = 1, spectra_parsers = spectra_parsers, mods = mods_to_localize, isolation_window = isolation_window, mz_error = mz_error, static_mods = static_mods).copy()
+            pyascore_results = df[df.search_file == 'open'].apply(cg.get_local, axis = 1, spectra_parsers = spectra_parsers, mods_to_localize = mods_to_localize, isolation_window = isolation_window, mz_error = mz_error, static_mods = static_mods).copy()
             pyascore_results = pd.DataFrame.from_dict(dict(zip(pyascore_results.index, pyascore_results.values))).T
             pyascore_results.rename(columns = {0:'localized_peptide', 1:'localized_better', 2:'dm_used', 3:'modification_info'}, inplace = True)
             
