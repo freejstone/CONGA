@@ -1274,23 +1274,30 @@ def get_modification_info(peptide, mods_for_correction=None):
             mods.append((j[1:].replace('][', ',').replace(
                 ']', '').replace('[', '').split(',')))
 
-    if type(mods_for_correction) == dict:  # replaces the rounded version for the accurate version
+    if type(mods_for_correction) == pd.core.frame.DataFrame:  # replaces the rounded version for the accurate version
         for i, aa in enumerate(aas):
-
-            if positions[i] == '1' and 'nterm' in mods_for_correction:
+            
+            if positions[i] == '1' and any(mods_for_correction.aa.str.contains('nterm')):
                 for j in range(len(mods[i])):
                     # note possible ambiguity if someone gives two modifications that coincide on the same amino acid that are really close...
-                    if abs(float(mods[i][j]) - mods_for_correction['nterm']) < 2*10**-len(mods[i][j].split(".")[1]):
-                        mods[i][j] = str(mods_for_correction['nterm'])
+                    check1 = abs(float(mods[i][j]) - mods_for_correction.mass) < 2*10**-len(mods[i][j].split(".")[1])
+                    check2 = mods_for_correction.aa == 'nterm'
+                    if any(check1 & check2):
+                        mods[i][j] = str(mods_for_correction.mass[check1 & check2].values[0])
 
-            if positions[i] == str(len(peptide_split)) and 'cterm' in mods_for_correction:
+            if positions[i] == str(len(peptide_split)) and any(mods_for_correction.aa.str.contains('cterm')):
                 for j in range(len(mods[i])):
-                    if abs(float(mods[i][j]) - mods_for_correction['cterm']) < 2*10**-len(mods[i][j].split(".")[1]):
-                        mods[i][j] = str(mods_for_correction['cterm'])
-
-            if aa in mods_for_correction:
-                if abs(float(mods[i][0]) - mods_for_correction[aa]) < 2*10**-len(mods[i][0].split(".")[1]):
-                    mods[i][0] = str(mods_for_correction[aa])
+                    # note possible ambiguity if someone gives two modifications that coincide on the same amino acid that are really close...
+                    check1 = abs(float(mods[i][j]) - mods_for_correction.mass) < 2*10**-len(mods[i][j].split(".")[1])
+                    check2 = mods_for_correction.aa == 'cterm'
+                    if any(check1 & check2):
+                        mods[i][j] = str(mods_for_correction.mass[check1 & check2].values[0])
+                        
+            if any(mods_for_correction.aa.str.contains(aa)):
+                check1 = abs(float(mods[i][0]) - mods_for_correction.mass) < 2*10**-len(mods[i][0].split(".")[1])
+                check2 = mods_for_correction.aa == aa
+                if any(check1 & check2):
+                    mods[i][0] = str(mods_for_correction.mass[check1 & check2].values[0])
 
     mods = [','.join(mod).join('[]') for mod in mods]
     modification_info = [''.join(x) for x in zip(positions, mods)]
@@ -1498,7 +1505,7 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
     aux_mod_pos = np.fromiter(psm_mod_positions.keys(), dtype=np.uint32)
     aux_mod_masses = np.fromiter(psm_mod_positions.values(), dtype=np.float32)
     
-    if type(mods_to_localize) == list:
+    if type(mods_to_localize) == pd.core.frame.DataFrame:
         for i in range(mods_to_localize.shape[0]):
     
             mod_check = ((dm - mods_to_localize.mass[i]) <= isolation_window[0] *

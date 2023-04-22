@@ -89,7 +89,9 @@ def test_get_amino_acid_to_warn():
 def test_get_modification_info():
     assert cg.get_modification_info('A[10.1]BCD[15.333]EF') == '1[10.1],4[15.333]'
     assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF') == '1[10.1,1.2345],4[15.333]'
-    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF', {'A': 10.13535, 'nterm': 1.23454321}) == '1[10.13535,1.23454321],4[15.333]'
+    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF', pd.DataFrame(zip(['A', 'nterm'], [10.13535, 1.23454321]), columns = ['aa', 'mass'])) == '1[10.13535,1.23454321],4[15.333]'
+    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF', pd.DataFrame(zip(['A', 'nterm', 'D', 'D'], [10.13535, 1.23454321, 20.333, 15.3331234]), columns = ['aa', 'mass'])) == '1[10.13535,1.23454321],4[15.3331234]'
+    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF', pd.DataFrame(zip(['A', 'nterm', 'D'], [10.13535, 1.23454321, 20.333]), columns = ['aa', 'mass'])) == '1[10.13535,1.23454321],4[15.333]'
     
 def test_get_local():
     df_test = pd.DataFrame(zip([32257, 35669], [3, 3], ['AGDMGNCVSGQQQEGGVSEEMKGPVQEDK', 'VEEESTGDPFGFDSDDES[79.966331]LPVSSK'], [15.98, 10], ['', '18[79.966331]'], [1.01620567, 3.24795341]), columns = ['scan', 'charge', 'peptide', 'delta_mass', 'modification_info', 'score'])

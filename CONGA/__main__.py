@@ -481,7 +481,7 @@ def main():
             mods_to_localize = cg.parse_mods_to_localize(sys.argv[0])
             sys.argv = sys.argv[1:]
         elif (next_arg == "--mods_for_correction"):
-            mods_for_correction = cg.parse_mods_of_interest(sys.argv[0], C = False)
+            mods_for_correction = cg.parse_mods_to_localize(sys.argv[0])
             sys.argv = sys.argv[1:]
         elif (next_arg == "--return_mass_mod_hist"):
             if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
