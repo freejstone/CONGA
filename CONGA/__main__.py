@@ -986,14 +986,14 @@ def main():
             pyascore_results = pd.DataFrame.from_dict(dict(zip(pyascore_results.index, pyascore_results.values))).T
             pyascore_results.rename(columns = {0:'localized_peptide', 1:'localized_better', 2:'dm_used', 3:'modification_info'}, inplace = True)
             
-        df['localized_peptide'] = df['peptide']
-        df['localized_better'] = False
-        df['dm_used'] = False
-        
-        df.loc[df.search_file == 'open', 'localized_peptide'] = pyascore_results.localized_peptide.copy()
-        df.loc[df.search_file == 'open', 'localized_better'] = pyascore_results.localized_better.copy()
-        df.loc[df.search_file == 'open', 'dm_used'] = pyascore_results.dm_used.copy()
-        df.loc[df.search_file == 'open', 'modification_info'] = pyascore_results.modification_info.copy()
+            df['localized_peptide'] = df['peptide']
+            df['localized_better'] = False
+            df['dm_used'] = False
+            
+            df.loc[df.search_file == 'open', 'localized_peptide'] = pyascore_results.localized_peptide.copy()
+            df.loc[df.search_file == 'open', 'localized_better'] = pyascore_results.localized_better.copy()
+            df.loc[df.search_file == 'open', 'dm_used'] = pyascore_results.dm_used.copy()
+            df.loc[df.search_file == 'open', 'modification_info'] = pyascore_results.modification_info.copy()
     
     #rounding the mass differences
     df = df.round({'delta_mass':4})

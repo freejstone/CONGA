@@ -1527,7 +1527,7 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
                              aux_mod_mass=aux_mod_masses)
     
                 if ascore.best_score > pepscore:
-                    localized_mass = mods_to_localize.aa[i]
+                    localized_mass = mods_to_localize.mass[i]
                     signature = ascore.pep_scores[0]['signature']
                     signature_pos = signature.argmax()
                     localized_pos = len(peptide.split(mods_to_localize.aa[i], signature_pos + 1)[0]) + 1
