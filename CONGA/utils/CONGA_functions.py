@@ -1492,8 +1492,8 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
             else:
                 psm_mod_positions[pos] = sum(
                     float(j) for j in re.search('\[(.*)\]', i).group(1).split(','))
-                
-            variable_mods[pos] = re.search('\[(.*)\]', i).group(1)
+            
+            variable_mods[pos] = (re.search('\[(.*)\]', i).group(1))
 
     pepscore = -np.inf
     localized_peptide = None
@@ -1583,10 +1583,10 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
             mod_info.append(str(localized_pos) + '[' + str(round(localized_mass, 4)) + ']')
             modification_info = ','.join(mod_info)
         else:
-            variable_mods[localized_pos] += ',' + str(localized_mass)
+            variable_mods[localized_pos] += ',' + str(round(localized_mass, 4))
             modification_info = []
             for pos in variable_mods:
-                modification_info.append(str(pos) + '[' + round(variable_mods[pos], 4) + ']')
+                modification_info.append(str(pos) + '[' + variable_mods[pos] + ']')
             modification_info = ','.join(modification_info)
         
 
