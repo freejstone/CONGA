@@ -1283,7 +1283,7 @@ def get_modification_info(peptide, mods_for_correction=None):
                     check1 = abs(float(mods[i][j]) - mods_for_correction.mass) < 2*10**-len(mods[i][j].split(".")[1])
                     check2 = mods_for_correction.aa == 'nterm'
                     if any(check1 & check2):
-                        mods[i][j] = str(mods_for_correction.mass[check1 & check2].values[0])
+                        mods[i][j] = str(round(mods_for_correction.mass[check1 & check2].values[0], 4))
 
             if positions[i] == str(len(peptide_split)) and any(mods_for_correction.aa.str.contains('cterm')):
                 for j in range(len(mods[i])):
@@ -1291,13 +1291,13 @@ def get_modification_info(peptide, mods_for_correction=None):
                     check1 = abs(float(mods[i][j]) - mods_for_correction.mass) < 2*10**-len(mods[i][j].split(".")[1])
                     check2 = mods_for_correction.aa == 'cterm'
                     if any(check1 & check2):
-                        mods[i][j] = str(mods_for_correction.mass[check1 & check2].values[0])
+                        mods[i][j] = str(round(mods_for_correction.mass[check1 & check2].values[0], 4))
                         
             if any(mods_for_correction.aa.str.contains(aa)):
                 check1 = abs(float(mods[i][0]) - mods_for_correction.mass) < 2*10**-len(mods[i][0].split(".")[1])
                 check2 = mods_for_correction.aa == aa
                 if any(check1 & check2):
-                    mods[i][0] = str(mods_for_correction.mass[check1 & check2].values[0])
+                    mods[i][0] = str(round(mods_for_correction.mass[check1 & check2].values[0], 4))
 
     mods = [','.join(mod).join('[]') for mod in mods]
     modification_info = [''.join(x) for x in zip(positions, mods)]
@@ -1577,16 +1577,16 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
         localized_better = False
     
     if mod_info == None:
-        modification_info = str(localized_pos) + '[' + str(localized_mass) + ']'
+        modification_info = str(localized_pos) + '[' + str(round(localized_mass, 4)) + ']'
     else:
         if localized_pos not in variable_mods:    
-            mod_info.append(str(localized_pos) + '[' + str(localized_mass) + ']')
+            mod_info.append(str(localized_pos) + '[' + str(round(localized_mass, 4)) + ']')
             modification_info = ','.join(mod_info)
         else:
             variable_mods[localized_pos] += ',' + str(localized_mass)
             modification_info = []
             for pos in variable_mods:
-                modification_info.append(str(pos) + '[' + variable_mods[pos] + ']')
+                modification_info.append(str(pos) + '[' + round(variable_mods[pos], 4) + ']')
             modification_info = ','.join(modification_info)
         
 
