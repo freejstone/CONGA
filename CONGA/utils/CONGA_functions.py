@@ -1588,6 +1588,12 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
             for pos in variable_mods:
                 modification_info.append(str(pos) + '[' + variable_mods[pos] + ']')
             modification_info = ','.join(modification_info)
-        
+    
+    aa_split = re.findall(
+        r"[^\W\d_]\[\d+.\d+\]\[\d+.\d+\]|[^\W\d_]\[\d+.\d+\]|[^\W\d_]", df.peptide)
+    
+    aa_split[localized_pos - 1] += '[' + str(round(localized_mass, 4)) + ']'
+   
+    localized_peptide = ''.join(aa_split)
 
     return([localized_peptide, localized_better, dm_used, modification_info])
