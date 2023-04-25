@@ -1476,9 +1476,7 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
             psm_mod_positions[len(peptide)] = static_mods['cterm']
     
     mod_info = None
-    
-    variable_mods = {}
-    
+        
     if df.modification_info != '':
         mod_info = df.modification_info.split('],')
         mod_info = [mod + ']' if i <
@@ -1493,8 +1491,6 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
                 psm_mod_positions[pos] = sum(
                     float(j) for j in re.search('\[(.*)\]', i).group(1).split(','))
             
-            variable_mods[pos] = (re.search('\[(.*)\]', i).group(1))
-
     pepscore = -np.inf
     localized_peptide = None
     dm_used = False
@@ -1576,18 +1572,7 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
     else:
         localized_better = False
     
-    if mod_info == None:
-        modification_info = str(localized_pos) + '[' + str(round(localized_mass, 4)) + ']'
-    else:
-        if localized_pos not in variable_mods:    
-            mod_info.append(str(localized_pos) + '[' + str(round(localized_mass, 4)) + ']')
-            modification_info = ','.join(mod_info)
-        else:
-            variable_mods[localized_pos] += ',' + str(round(localized_mass, 4))
-            modification_info = []
-            for pos in variable_mods:
-                modification_info.append(str(pos) + '[' + variable_mods[pos] + ']')
-            modification_info = ','.join(modification_info)
+    modification_info = str(localized_pos) + '[' + str(round(localized_mass, 4)) + ']'
     
     aa_split = re.findall(
         r"[^\W\d_]\[\d+.\d+\]\[\d+.\d+\]|[^\W\d_]\[\d+.\d+\]|[^\W\d_]", df.peptide)
