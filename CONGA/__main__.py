@@ -916,7 +916,9 @@ def main():
     sys.stderr.write("Reporting delta masses and variable modifications (if applicable) for each discovered peptide. \n")
     
     if df.shape[0] > 0:
-        df_extra = cg.create_cluster(target_decoys_all.copy(), df['winning_peptides'].copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
+        original_winning_peptides = df['winning_peptides'].str.replace(
+            "\\[|\\]|\\.|\\d+", "", regex=True).copy()
+        df_extra = cg.create_cluster(target_decoys_all.copy(), original_winning_peptides.copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
         df_extra['originally_discovered'] = False
         df_extra = cg.get_thresholds(df.copy(), df_extra.copy(), df_all.copy(), delta_mass_max, precursor_bin_width, tops_gw, score)
         df = pd.concat([df, df_extra]).reset_index(drop = True)
