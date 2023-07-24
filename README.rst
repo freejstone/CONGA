@@ -12,10 +12,12 @@ Documentation
 
 You can find documentation on how to use CONGA over on `readtheddocs <https://open-groupwalk.readthedocs.io/en/latest/>`_. Alternatively you can find the same documentation under docs/pages in this respository.
 
-Paper
-=====
+Papers
+======
 
-A link to the biorXiv paper will eventually go here.
+`Analysis of tandem mass spectrometry data with CONGA: Combining Open and Narrow searches with Group-wise Analysis <https://www.biorxiv.org/content/10.1101/2023.05.02.539167v2>`_
+
+`Re-investigating the correctness of decoy-based false discovery rate control in proteomics tandem mass spectrometry <https://www.biorxiv.org/content/10.1101/2023.06.21.546013v1>`_
 
 Installation
 ============
