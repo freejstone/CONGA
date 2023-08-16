@@ -790,8 +790,9 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix=
             df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, protein, original_target_sequence, file), columns=[
                               'winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'protein', 'original_target_sequence', 'file'])
         else:
-            df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence), columns=[
-                              'winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence'])
+            modifications = target_decoys['modifications']
+            df = pd.DataFrame(zip(winning_scores, labels, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence, modifications), columns=[
+                              'winning_scores', 'labels', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence', 'modifications'])
     else:
         target_decoys['scan_plus_seq'] = target_decoys['scannum'].astype(
             str) + ' ' + target_decoys['sequence']
@@ -1298,11 +1299,90 @@ def get_modification_info(peptide, mods_for_correction=None):
                 check2 = mods_for_correction.aa == aa
                 if any(check1 & check2):
                     mods[i][0] = str(round(mods_for_correction.mass[check1 & check2].values[0], 4))
-
+    
     mods = [','.join(mod).join('[]') for mod in mods]
     modification_info = [''.join(x) for x in zip(positions, mods)]
     modification_info = ','.join(modification_info)
     return(modification_info)
+###############################################################################
+
+
+def get_modification_info_comet(df, mods_for_correction=None):
+    '''
+    Parameters
+    ----------
+    df : Pandas DataFrame
+        Containing a column of peptides and their modifications
+
+    Returns
+    -------
+    A string containing the modification info.
+
+    '''
+    
+    peptide = df.peptide
+    modifications = df.modifications
+    
+    peptide_split = re.findall(
+        r"[^\W\d_]\[\d+.\d+\]\[\d+.\d+\]|[^\W\d_]\[\d+.\d+\]|[^\W\d_]", peptide)
+
+    positions = []
+    aas = []
+    mods = []
+    for i, j in enumerate(peptide_split):
+        if any(char.isdigit() for char in j):
+            positions.append(str(i + 1))
+            aas.append(j[0])
+            mods.append((j[1:].replace('][', ',').replace(
+                ']', '').replace('[', '').split(',')))
+
+    if type(mods_for_correction) == pd.core.frame.DataFrame:  # replaces the rounded version for the accurate version
+        for i, aa in enumerate(aas):
+            
+            if positions[i] == '1' and any(mods_for_correction.aa.str.contains('nterm')):
+                for j in range(len(mods[i])):
+                    # note possible ambiguity if someone gives two modifications that coincide on the same amino acid that are really close...
+                    check1 = abs(float(mods[i][j]) - mods_for_correction.mass) < 2*10**-len(mods[i][j].split(".")[1])
+                    check2 = mods_for_correction.aa == 'nterm'
+                    if any(check1 & check2):
+                        mods[i][j] = str(round(mods_for_correction.mass[check1 & check2].values[0], 4))
+
+            if positions[i] == str(len(peptide_split)) and any(mods_for_correction.aa.str.contains('cterm')):
+                for j in range(len(mods[i])):
+                    # note possible ambiguity if someone gives two modifications that coincide on the same amino acid that are really close...
+                    check1 = abs(float(mods[i][j]) - mods_for_correction.mass) < 2*10**-len(mods[i][j].split(".")[1])
+                    check2 = mods_for_correction.aa == 'cterm'
+                    if any(check1 & check2):
+                        mods[i][j] = str(round(mods_for_correction.mass[check1 & check2].values[0], 4))
+                        
+            if any(mods_for_correction.aa.str.contains(aa)):
+                for j in range(len(mods[i])):
+                    check1 = abs(float(mods[i][j]) - mods_for_correction.mass) < 2*10**-len(mods[i][j].split(".")[1])
+                    check2 = mods_for_correction.aa == aa
+                    if any(check1 & check2):
+                        mods[i][j] = str(round(mods_for_correction.mass[check1 & check2].values[0], 4))
+        
+    #so that n-terminal becomes 0th position and c-terminal becomes n+1th position
+    if len(mods) > 0:
+        if (len(mods[0]) == 1) and ('_N' in modifications):
+            positions[0] = '0'
+        if (len(mods[0]) == 2) and ('_N' in modifications):
+            temp = [[item] for item in mods[0]]
+            mods = temp + mods[1:]
+            positions = ['0'] + positions
+        if (len(mods[-1]) == 1) and ('_C' in modifications):
+            positions[-1] = str(int(positions[-1]) + 1)
+        if len(mods[-1]) == 2 and ('_C' in modifications):
+            temp = [[item] for item in mods[-1]]
+            mods = mods[:-1] + temp
+            positions = positions + [str(int(positions[-1]) + 1)]
+        
+    
+    mods = [','.join(mod).join('[]') for mod in mods]
+    modification_info = [''.join(x) for x in zip(positions, mods)]
+    modification_info = ','.join(modification_info)
+    return(modification_info)
+
 ###############################################################################
 
 
@@ -1361,8 +1441,9 @@ def create_cluster(target_decoys, original_target_discoveries, dcy_prefix, score
             df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, protein, original_target_sequence, file), columns=[
                                     'winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'protein', 'original_target_sequence', 'file'])
         else:
-            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence), columns=[
-                                    'winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence'])
+            modifications = targets['modifications']
+            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence, modifications), columns=[
+                                    'winning_scores', 'delta_mass', 'winning_peptides', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence', 'modifications'])
     else:
         winning_scores = targets[score]
         winning_peptides = targets['sequence']

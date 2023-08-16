@@ -236,15 +236,15 @@ def print_info(command_line, output_dir, file_root, overwrite, account_mods, sea
     if os.path.isdir(output_dir):
         if os.path.exists(path = output_dir + "/" + file_root + ".log.txt") and overwrite:
             os.remove(output_dir + "/" + file_root + ".log.txt")
-            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s',force=True)
         elif os.path.exists(path = output_dir + "/" + file_root + ".log.txt") and not overwrite:
             log_file = output_dir + "/" + file_root + ".log.txt"
             sys.exit("The file %s already exists and cannot be overwritten. Use --overwrite T to replace or choose a different output file name. \n" %(log_file))
         else:
-            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+            logging.basicConfig(filename=output_dir + "/" + file_root + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s',force=True)
     else:
         os.mkdir(output_dir)
-        logging.basicConfig(filename=output_dir + "/" + file_root  + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s')
+        logging.basicConfig(filename=output_dir + "/" + file_root  + ".log.txt", level=logging.DEBUG, format = '%(levelname)s: %(message)s',force=True)
     
     #print CPU info
     logging.info('CPU: ' + str(platform.platform()))
@@ -970,8 +970,16 @@ def main():
             df['flag'] = pd.Series([], dtype = 'object')
         df.pop('flanking_aa')
     
-    df['modification_info'] = df['peptide'].apply(cg.get_modification_info, mods_for_correction = mods_for_correction)
     
+    #For peptides with two modifications as in COMET like B[1.2345][33]CDEFG, the first modification is the n-terminal, and
+    #will be represented as 0[1.2345]
+    #The last modification is the c-terminal
+    if tide_used == 'comet':
+        df['modification_info'] = df[['peptide', 'modifications']].apply(cg.get_modification_info_comet, mods_for_correction = mods_for_correction, axis = 1)
+        df.pop('modifications')
+    else:
+        df['modification_info'] = df['peptide'].apply(cg.get_modification_info, mods_for_correction = mods_for_correction)
+                                                                  
     df.reset_index(inplace = True, drop = True)
     
     if type(spectrum_files) == list:

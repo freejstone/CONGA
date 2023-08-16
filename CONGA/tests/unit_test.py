@@ -88,11 +88,24 @@ def test_get_amino_acid_to_warn():
     
 def test_get_modification_info():
     assert cg.get_modification_info('A[10.1]BCD[15.333]EF') == '1[10.1],4[15.333]'
-    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF') == '1[10.1,1.2345],4[15.333]'
-    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF', pd.DataFrame(zip(['A', 'nterm'], [10.13535, 1.23454321]), columns = ['aa', 'mass'])) == '1[10.1354,1.2345],4[15.333]'
-    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF', pd.DataFrame(zip(['A', 'nterm', 'D', 'D'], [10.13535, 1.23454321, 20.333, 15.3331234]), columns = ['aa', 'mass'])) == '1[10.1354,1.2345],4[15.3331]'
-    assert cg.get_modification_info('A[10.1][1.2345]BCD[15.333]EF', pd.DataFrame(zip(['A', 'nterm', 'D'], [10.13535, 1.23454321, 20.333]), columns = ['aa', 'mass'])) == '1[10.1354,1.2345],4[15.333]'
-    
+    assert cg.get_modification_info('A[10.1]BCD[15.333]EF') == '1[10.1],4[15.333]'
+    assert cg.get_modification_info('A[10.1]BCD[15.333]EF', pd.DataFrame(zip(['A'], [10.13535]), columns = ['aa', 'mass'])) == '1[10.1354],4[15.333]'
+    assert cg.get_modification_info('A[1.23]BCD[15.333]EF', pd.DataFrame(zip(['nterm', 'D', 'D'], [1.23454321, 20.333, 15.3331234]), columns = ['aa', 'mass'])) == '1[1.2345],4[15.3331]'
+    assert cg.get_modification_info('A[10.1]BCD[15.333]EF', pd.DataFrame(zip(['A', 'D'], [10.13535, 20.333]), columns = ['aa', 'mass'])) == '1[10.1354],4[15.333]'
+
+def test_get_modification_info_comet():
+    df = pd.DataFrame(zip(['A[10.1]BCD[15.333]EF'], ['1_S_10.1,4_S_15.3334']), columns = ['peptide', 'modifications'])
+    assert df.apply(cg.get_modification_info_comet, axis = 1).loc[0] == '1[10.1],4[15.333]'
+    df = pd.DataFrame(zip(['A[10.1]BCD[15.333]EF'], ['1_V_10.1_N,4_S_15.3334']), columns = ['peptide', 'modifications'])
+    assert df.apply(cg.get_modification_info_comet, axis = 1).loc[0] == '0[10.1],4[15.333]'
+    df = pd.DataFrame(zip(['A[10.1][11.34]BCD[15.333]EF'], ['1_V_10.1_N,1_S_11.3432,4_S_15.3334']), columns = ['peptide', 'modifications'])
+    assert df.apply(cg.get_modification_info_comet, axis = 1).loc[0] == '0[10.1],1[11.34],4[15.333]'
+    mods_for_correction = pd.DataFrame(zip(['nterm', 'A', 'D'], [10.13535, 11.3432, 15.333333]), columns = ['aa', 'mass'])
+    assert df.apply(cg.get_modification_info_comet, mods_for_correction = mods_for_correction, axis = 1).loc[0] == '0[10.1354],1[11.3432],4[15.3333]'
+    df = pd.DataFrame(zip(['ABCD[15.333]EF[10.1][11.34]'], ['6_V_10.1_C,6_S_11.3432,4_S_15.3334']), columns = ['peptide', 'modifications'])
+    mods_for_correction = pd.DataFrame(zip(['cterm', 'F', 'D'], [10.13535, 11.3432, 15.333333]), columns = ['aa', 'mass'])
+    assert df.apply(cg.get_modification_info_comet, mods_for_correction = mods_for_correction, axis = 1).loc[0] == '4[15.3333],6[10.1354],7[11.3432]'
+
 def test_get_local():
     df_test = pd.DataFrame(zip([32257, 35669, 35669], [3, 3, 3], ['AGDMGNCVSGQQQEGGVSEEMKGPVQEDK', 'VEEESTGDPFGFDSDDES[79.966331]LPVSSK', 'VEEESTGDPFGFDSDDES[59.966331][20.0]LPVSSK'], [15.98, 10, 10], ['', '18[79.966331]', '18[59.966331,20]'], [1.01620567, 3.24795341, 3.24795341]), columns = ['scan', 'charge', 'peptide', 'delta_mass', 'modification_info', 'score'])
     spectra_parsers = {'./CONGA/tests/test_spectra.mzML': pyascore.spec_parsers.SpectraParser('./CONGA/tests/test_spectra.mzML', "mzML").to_dict()}
