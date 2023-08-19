@@ -13,6 +13,7 @@ Welcome to CONGA's documentation!
    pages/output_files
    pages/parameters
    pages/tutorial_example
+   pages/limelight
 
 Introduction
 ============
