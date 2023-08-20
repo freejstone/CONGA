@@ -25,7 +25,7 @@ Dynamic-level competition
 Group construction
 ------------------
 
-* ``--precursor_bin_width <value>``: To determine the size of the bins used to discretize the mass-differences between the sample and theoretical spectra. Default = 1.00050794.
+* ``--precursor_bin_width <value>``: To determine the size of the bins used to discretize the mass-differences between the sample and theoretical spectra. Default = 1.0005079/4.
 * ``--min_group_size <integer>``: The number of multiples of K that is used to determine the minimum size of each group. See option ``--K``. Default = 2.
 * ``--tops_gw <integer>``: The number of top PSMs for each scan in the open search that will be used by group-walk. Default = 2.
 * ``--group_thresh <value>``: The p-value threshold used to determine whether groups are merged or kept separate in the KS test. Default = 0.01.
