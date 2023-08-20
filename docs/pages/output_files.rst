@@ -3,7 +3,7 @@ Output files
 """"""""""""
 
 CONGA returns files with names of the form ``file_root.content.ext``, where ``file_root`` is provided by the user, ``content`` indicates the contents of the file, and ``ext`` indicates the file type.
-The file ``file_root.target.txt`` is always returned, whereas the others are optional.
+The files ``file_root.target.txt`` and ``file_root.target_mods.txt`` are always returned, whereas the others are optional.
 
 * ``file_root.target.txt``: A list of target peptides discovered by CONGAs at a user-specified FDR threshold.
 * ``file_root.target_mods.txt``: A list of target peptides with distinct delta-masses and variable modifications that are associated to the list of target peptides discovered in ``file_root.target.txt``.
