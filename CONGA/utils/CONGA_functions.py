@@ -908,7 +908,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix=
 
             if test_first.pvalue <= group_thresh:
                 unique_gs = all_group_ids.unique()
-                unique_gs = set(unique_gs) - set([0, 'narrow'])
+                unique_gs = sorted(set(unique_gs) - set([0, 'narrow']))
                 unique_gs = [
                     unique_g for unique_g in unique_gs if rank_lab in unique_g]
                 unique_gs = random.sample(unique_gs, len(unique_gs))
