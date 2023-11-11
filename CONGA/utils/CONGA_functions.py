@@ -867,6 +867,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix=
         sys.stderr.write("Constructing groups adaptively.\n")
         #Now to create the adaptive group structure
         all_group_ids = pd.Series([0]*len(winning_scores))
+        all_group_ids[df['database'] == 'narrow'] = None
         all_group_ids[df['database'] == 'narrow'] = 'narrow'
         #PSMs with xcorr_rank of 2 or more get "bundled together"
         rank = 1
@@ -1057,8 +1058,8 @@ def add_modification_to_amino_acid(df, static_mods):
     variable mass modifications. (Static mods ignored).
 
     '''
-    aa_list = df[0]
-    mods = df[1]
+    aa_list = df.iloc[0]
+    mods = df.iloc[1]
 
     if type(mods) == float:
         return aa_list  # to throw away when we have NaN appear
