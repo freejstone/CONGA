@@ -661,6 +661,8 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh=0
 
         for i in range(len(target_decoys_all['split_col'].unique())):
             target_decoys_all.loc[target_decoys_all['split_col'] == target_decoys_all['split_col'].unique(
+            )[i], 'drop_scan'] = None
+            target_decoys_all.loc[target_decoys_all['split_col'] == target_decoys_all['split_col'].unique(
             )[i], 'drop_scan'] = list(return_dict[i])  # update the main dataframe with the results from each process
 
     # drop the neighbours
