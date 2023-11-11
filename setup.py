@@ -22,7 +22,7 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ),
-    python_requires='>=3.9.0, <=3.9.18',
+    python_requires='>=3.9.0, <=3.10.11',
     install_requires=[
         'pyteomics',
         'pandas',
