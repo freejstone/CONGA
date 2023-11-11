@@ -866,7 +866,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix=
         logging.info("Constructing groups adaptively.")
         sys.stderr.write("Constructing groups adaptively.\n")
         #Now to create the adaptive group structure
-        all_group_ids = pd.Series([0]*len(winning_scores))
+        all_group_ids = pd.Series([0]*len(winning_scores), dtype = 'object')
         all_group_ids[df['database'] == 'narrow'] = ''
         all_group_ids[df['database'] == 'narrow'] = 'narrow'
         #PSMs with xcorr_rank of 2 or more get "bundled together"
