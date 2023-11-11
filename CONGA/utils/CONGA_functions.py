@@ -869,7 +869,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix=
         all_group_ids = pd.Series([0]*len(winning_scores), dtype = 'object')
         all_group_ids[df['database'] == 'narrow'] = ''
         all_group_ids[df['database'] == 'narrow'] = 'narrow'
-        #PSMs with xcorr_rank of 2 or more get "bundled together"
+        #PSMs with xcorr_rank of 2 or more get "bundled together" 
         rank = 1
         rank_val = [1]
         rank_lab = 'top 1 PSMs'
