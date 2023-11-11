@@ -636,7 +636,7 @@ def filter_narrow_open(narrow_target_decoys, open_target_decoys, score, thresh=0
             target_decoys_all['split_col'] = pd.qcut(
                 target_decoys_all['scannum'], n_processes)
         target_decoys_grouped = target_decoys_all.groupby(
-            target_decoys_all.split_col)
+            target_decoys_all.split_col,observed=False)
         list_of_df = [0]*n_processes  # create a list of partitioned dataframes
         for i in range(len(target_decoys_all['split_col'].unique())):
             list_of_df[i] = target_decoys_grouped.get_group(
@@ -867,7 +867,7 @@ def create_groups(target_decoys, narrow_target_decoys, peptide_list, dcy_prefix=
         sys.stderr.write("Constructing groups adaptively.\n")
         #Now to create the adaptive group structure
         all_group_ids = pd.Series([0]*len(winning_scores))
-        all_group_ids[df['database'] == 'narrow'] = None
+        all_group_ids[df['database'] == 'narrow'] = ''
         all_group_ids[df['database'] == 'narrow'] = 'narrow'
         #PSMs with xcorr_rank of 2 or more get "bundled together"
         rank = 1
