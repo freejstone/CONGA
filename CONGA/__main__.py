@@ -935,7 +935,7 @@ def main():
         original_winning_peptides = df['winning_peptides'].str.replace(
             "\\[|\\]|\\.|\\d+", "", regex=True).copy()
         if get_all_psms:
-            df_extra = cgclean(target_decoys_all.copy(), tide_used, score)
+            df_extra = cg.clean(target_decoys_all.copy(), tide_used, score)
         else:
             df_extra = cg.create_cluster(target_decoys_all.copy(), original_winning_peptides.copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
         df_extra['originally_discovered'] = False
