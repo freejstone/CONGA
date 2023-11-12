@@ -1666,3 +1666,51 @@ def get_local(df, spectra_parsers, mods_to_localize, isolation_window, mz_error=
     localized_peptide = ''.join(aa_split)
 
     return([localized_peptide, localized_better, dm_used, modification_info])
+
+
+###############################################################################
+def clean(target_decoys, tide_used, score):
+    if tide_used == 'tide' or tide_used == 'comet':
+        labels = target_decoys['target_decoy'].copy()
+        labels[labels == 'target'] = 1
+        labels[labels == 'decoy'] = -1
+        winning_scores = target_decoys[score]
+        winning_peptides = target_decoys['sequence']
+        rank = target_decoys['xcorr_rank']
+        delta_mass = target_decoys['spectrum_neutral_mass'] - target_decoys['peptide_mass']
+        database = target_decoys['database']
+        scan = target_decoys['scan']
+        charge = target_decoys['charge']
+        spectrum_neutral_mass = target_decoys['spectrum_neutral_mass']
+        protein = target_decoys['protein_id']
+        original_target_sequence = target_decoys['original_target_sequence']
+        if tide_used == 'tide':
+            file = target_decoys['file']
+            flanking_aa = target_decoys['flanking_aa']
+            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, labels, rank, database, charge, spectrum_neutral_mass, flanking_aa, scan, protein, original_target_sequence, file), columns=[
+                                    'winning_scores', 'delta_mass', 'winning_peptides', 'labels', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'flanking_aa', 'scan', 'protein', 'original_target_sequence', 'file'])
+        else:
+            modifications = target_decoys['modifications']
+            df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, labels, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence, modifications), columns=[
+                                    'winning_scores', 'delta_mass', 'winning_peptides', 'labels', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence', 'modifications'])
+    else:
+        labels = target_decoys['target_decoy'].copy()
+        labels[labels == 'target'] = 1
+        labels[labels == 'decoy'] = -1
+        winning_scores = target_decoys[score]
+        winning_peptides = target_decoys['sequence']
+        rank = target_decoys['hit_rank']
+        delta_mass = target_decoys['precursor_neutral_mass'] - \
+            target_decoys['calc_neutral_pep_mass']
+        database = target_decoys['database']
+        scan = target_decoys['scannum']
+        charge = target_decoys['charge']
+        spectrum_neutral_mass = target_decoys['precursor_neutral_mass']
+        protein = target_decoys['protein_id']
+        original_target_sequence = target_decoys['original_target_sequence']
+        df_extra = pd.DataFrame(zip(winning_scores, delta_mass, winning_peptides, labels, rank, database, charge, spectrum_neutral_mass, scan, protein, original_target_sequence), columns=[
+                                'winning_scores', 'delta_mass', 'winning_peptides', 'labels', 'rank', 'database', 'charge', 'spectrum_neutral_mass', 'scan', 'protein', 'original_target_sequence'])
+
+    return(df_extra)
+
+

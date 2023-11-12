@@ -368,6 +368,7 @@ def main():
     mods_to_localize = None
     mz_error = 0.05
     mods_for_correction = None
+    get_all_psms = False
     
     command_line = ' '.join(sys.argv)
     
@@ -526,6 +527,15 @@ def main():
                 get_q = False
             else:
                 sys.stderr.write("Invalid argument for --get_q")
+                sys.exit(1)
+            sys.argv = sys.argv[1:]
+        elif (next_arg == '--get_all_psms'):
+            if str(sys.argv[0]) in ['t', 'T', 'true', 'True']:
+                get_all_psms = True
+            elif str(sys.argv[0]) in ['f', 'F', 'false', 'False']:
+                get_all_psms = False
+            else:
+                sys.stderr.write("Invalid argument for --get_all_psms")
                 sys.exit(1)
             sys.argv = sys.argv[1:]
         else:
@@ -906,19 +916,28 @@ def main():
         
         
     df_decoys = df[df['labels'] == -1].copy()
-    df = df[df['labels'] == 1]
-    df.pop('labels')
+    
+    if not get_all_psms:
+        df = df[df['labels'] == 1]
+        df.pop('labels')
     
     df['originally_discovered'] = True
     df['above_group_threshold'] = True
     
-    logging.info("Reporting delta masses and variable modifications (if applicable) for each discovered peptide.")
-    sys.stderr.write("Reporting delta masses and variable modifications (if applicable) for each discovered peptide. \n")
-    
+    if get_all_psms:
+        logging.info("Reporting delta masses and variable modifications (if applicable) for each discovered peptide.")
+        sys.stderr.write("Reporting delta masses and variable modifications (if applicable) for each discovered peptide. \n")
+    else:
+        logging.info("Reporting additional PSMs and whether they were above their respective group thresholds.")
+        sys.stderr.write("Reporting additional PSMs and whether they were above their respective group thresholds. \n")
+        
     if df.shape[0] > 0:
         original_winning_peptides = df['winning_peptides'].str.replace(
             "\\[|\\]|\\.|\\d+", "", regex=True).copy()
-        df_extra = cg.create_cluster(target_decoys_all.copy(), original_winning_peptides.copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
+        if get_all_psms:
+            df_extra = clean(target_decoys_all.copy(), tide_used, score)
+        else:
+            df_extra = cg.create_cluster(target_decoys_all.copy(), original_winning_peptides.copy(), dcy_prefix, score, tops_gw, tide_used, isolation_window)
         df_extra['originally_discovered'] = False
         df_extra = cg.get_thresholds(df.copy(), df_extra.copy(), df_all.copy(), delta_mass_max, precursor_bin_width, tops_gw, score)
         df = pd.concat([df, df_extra]).reset_index(drop = True)
