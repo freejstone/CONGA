@@ -925,11 +925,11 @@ def main():
     df['above_group_threshold'] = True
     
     if get_all_psms:
-        logging.info("Reporting delta masses and variable modifications (if applicable) for each discovered peptide.")
-        sys.stderr.write("Reporting delta masses and variable modifications (if applicable) for each discovered peptide. \n")
-    else:
         logging.info("Reporting additional PSMs and whether they were above their respective group thresholds.")
         sys.stderr.write("Reporting additional PSMs and whether they were above their respective group thresholds. \n")
+    else:
+        logging.info("Reporting delta masses and variable modifications (if applicable) for each discovered peptide.")
+        sys.stderr.write("Reporting delta masses and variable modifications (if applicable) for each discovered peptide. \n")
         
     if df.shape[0] > 0:
         original_winning_peptides = df['winning_peptides'].str.replace(
