@@ -25,7 +25,7 @@ setuptools.setup(
     python_requires='>=3.9.0, <=3.10.13',
     install_requires=[
         'pyteomics',
-        'pandas',
+        'pandas<=2.1.4',
         'numpy',
         'scipy',
         'tdqm',
